@@ -1,32 +1,368 @@
 {
   "metrics": {
-    "accuracy": 0.5,
-    "macro_precision": 0.25,
-    "macro_recall": 0.5,
-    "macro_f1": 0.3333,
-    "weighted_f1": 0.3333,
+    "accuracy": 0.9991,
+    "macro_precision": 0.9991,
+    "macro_recall": 0.9991,
+    "macro_f1": 0.9991,
+    "weighted_f1": 0.9991,
     "per_class": {
-      "Hello": {
-        "precision": 0.5,
+      "Bear": {
+        "precision": 1.0,
         "recall": 1.0,
-        "f1": 0.6667,
-        "support": 10
+        "f1": 1.0,
+        "support": 60
       },
-      "ThankYou": {
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "support": 10
+      "Break": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Brinjal": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Budget": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Busy": {
+        "precision": 0.9836,
+        "recall": 1.0,
+        "f1": 0.9917,
+        "support": 60
+      },
+      "Cabbage": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Carrot": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Cauliflower": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Chilli": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Clean": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Close": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Come": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Cook": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Crocodile": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Cry": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Cucumber": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Deer": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Drink": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Elephant": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Exam": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Fedup": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Fever": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Giraffe": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Give": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Good Morning": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Good afternoon": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Hello": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Hug": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Injury": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Interview": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Jump": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Karnataka": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Key": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Knife": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Lemon": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Lion": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Man": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Maths": {
+        "precision": 0.9833,
+        "recall": 0.9833,
+        "f1": 0.9833,
+        "support": 60
+      },
+      "Maybe": {
+        "precision": 0.9833,
+        "recall": 0.9833,
+        "f1": 0.9833,
+        "support": 60
+      },
+      "Monkey": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Onion": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Peacock": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Pigeon": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Pour": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Radish": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Sparrow": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Still": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 30
+      },
+      "Switch": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Tea": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Temple": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Thank you": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Tiger": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Turtle": {
+        "precision": 1.0,
+        "recall": 0.9833,
+        "f1": 0.9916,
+        "support": 60
+      },
+      "Umbrella": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Uncle": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Vegetables": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "Volcano": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 60
+      },
+      "What is your Name": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 18
       }
     }
   },
   "latency": {
-    "mean_ms": 2.7,
-    "std_ms": 0.54,
-    "min_ms": 1.85,
-    "max_ms": 5.18,
-    "p95_ms": 3.88
+    "mean_ms": 3.52,
+    "std_ms": 0.93,
+    "min_ms": 1.97,
+    "max_ms": 8.05,
+    "p95_ms": 4.92
   },
-  "mean_confidence": 0.5007,
-  "num_samples": 20
+  "mean_confidence": 0.9993,
+  "num_samples": 3408
 }

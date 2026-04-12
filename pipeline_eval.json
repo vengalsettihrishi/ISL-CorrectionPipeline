@@ -1,0 +1,99 @@
+{
+  "results": [
+    {
+      "config": "No correction",
+      "noise_rate": 0.0,
+      "bleu": 0.0,
+      "chrf": 0.5222,
+      "n_samples": 43
+    },
+    {
+      "config": "Rules only",
+      "noise_rate": 0.0,
+      "bleu": 0.1395,
+      "chrf": 0.7831,
+      "n_samples": 43
+    },
+    {
+      "config": "Rules + LM",
+      "noise_rate": 0.0,
+      "bleu": 0.093,
+      "chrf": 0.7493,
+      "n_samples": 43
+    },
+    {
+      "config": "No correction",
+      "noise_rate": 0.1,
+      "bleu": 0.0,
+      "chrf": 0.5019,
+      "n_samples": 43
+    },
+    {
+      "config": "Rules only",
+      "noise_rate": 0.1,
+      "bleu": 0.1395,
+      "chrf": 0.7385,
+      "n_samples": 43
+    },
+    {
+      "config": "Rules + LM",
+      "noise_rate": 0.1,
+      "bleu": 0.093,
+      "chrf": 0.7183,
+      "n_samples": 43
+    },
+    {
+      "config": "No correction",
+      "noise_rate": 0.2,
+      "bleu": 0.0,
+      "chrf": 0.4912,
+      "n_samples": 43
+    },
+    {
+      "config": "Rules only",
+      "noise_rate": 0.2,
+      "bleu": 0.093,
+      "chrf": 0.708,
+      "n_samples": 43
+    },
+    {
+      "config": "Rules + LM",
+      "noise_rate": 0.2,
+      "bleu": 0.0465,
+      "chrf": 0.6789,
+      "n_samples": 43
+    },
+    {
+      "config": "No correction",
+      "noise_rate": 0.3,
+      "bleu": 0.0,
+      "chrf": 0.4936,
+      "n_samples": 43
+    },
+    {
+      "config": "Rules only",
+      "noise_rate": 0.3,
+      "bleu": 0.093,
+      "chrf": 0.6972,
+      "n_samples": 43
+    },
+    {
+      "config": "Rules + LM",
+      "noise_rate": 0.3,
+      "bleu": 0.0698,
+      "chrf": 0.667,
+      "n_samples": 43
+    }
+  ],
+  "ablation": {
+    "All rules": 0.1395,
+    "Without R1 (Pronoun Normalization)": 0.1395,
+    "Without R2 (WH-Word Fronting)": 0.1395,
+    "Without R3 (Negation Reordering)": 0.1395,
+    "Without R4 (SOV\u2192SVO Reordering)": 0.093,
+    "Without R5 (Adjective-Noun Reorder)": 0.1395,
+    "Without R6 (Verb Conjugation)": 0.0,
+    "Without R7 (Auxiliary Insertion)": 0.1395,
+    "Without R8 (Capitalization & Punct)": 0.1395
+  }
+}
