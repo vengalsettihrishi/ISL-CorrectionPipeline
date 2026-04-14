@@ -1,13 +1,13 @@
 """
-noise_injector.py — Controlled Noise Injection for ISL Pipeline Evaluation
+noise_injector.py -- Controlled Noise Injection for ISL Pipeline Evaluation
 
 Simulates real-world classifier noise by corrupting ISL gloss sequences
 at controlled rates. Three noise operations, each documented and justified.
 
 NOISE OPERATIONS:
-  1. Token Duplication — simulates the buffer receiving a repeated detection
-  2. Token Deletion   — simulates a missed gesture / dropped frame
-  3. Token Transposition — simulates temporal instability in gesture transitions
+  1. Token Duplication -- simulates the buffer receiving a repeated detection
+  2. Token Deletion   -- simulates a missed gesture / dropped frame
+  3. Token Transposition -- simulates temporal instability in gesture transitions
 
 USAGE:
     from noise_injector import NoiseInjector
@@ -238,7 +238,7 @@ def run_demo():
             # Use different seed for each trial
             injector.rng = random.Random(42 + trial + int(rate * 100))
             noisy = injector.inject(sample, rate)
-            changed = "✓ changed" if noisy != sample else "  same"
+            changed = "* changed" if noisy != sample else "  same"
             print(f"  Trial {trial+1}: {' '.join(noisy):<40} {changed}")
         print()
 
@@ -251,7 +251,7 @@ def run_demo():
     for rate, pairs in dataset.items():
         print(f"Noise rate {rate:.0%}:")
         for clean, noisy, expected in pairs:
-            print(f"  {' '.join(clean):<30} → {' '.join(noisy)}")
+            print(f"  {' '.join(clean):<30} -> {' '.join(noisy)}")
         print()
 
 

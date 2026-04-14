@@ -1,22 +1,27 @@
 """
-train.py — Training loop for the ISL classifier.
+train.py — Training loop for ISL recognition (minGRU + CTC).
 
 Features:
-    - Early stopping with patience
-    - Learning rate scheduling (ReduceLROnPlateau)
-    - Best model checkpointing
-    - Per-epoch train/val loss and accuracy logging
-    - Deterministic seeding for reproducibility
+    - CTC loss with zero_infinity=True for numerical stability
+    - AdamW optimizer with weight decay
+    - ReduceLROnPlateau scheduler
+    - Gradient clipping (max_norm=1.0) — essential for CTC
+    - Mixed-precision training (torch.cuda.amp) on GPU
+    - Early stopping with patience=15, tracking validation WER
+    - Best model checkpointing by validation WER
+    - Reproducible seeding
+    - Detailed per-epoch logging
 
 Usage:
-    python train.py --data_dir ./processed_landmarks --epochs 50
+    python train.py
+    python train.py --epochs 50 --batch_size 16 --lr 0.001
 """
 
 import argparse
 import json
 import time
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 import torch
@@ -24,16 +29,17 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from config import PipelineConfig, ModelConfig, TrainConfig
-from dataset import create_dataloaders
-from model import build_model
+from config import Config
+from model.isl_model import ISLModel
+from data.dataset import create_dataloaders, collate_fn
+from data.label_encoder import LabelEncoder
 
 
 # ---------------------------------------------------------------------------
 # Reproducibility
 # ---------------------------------------------------------------------------
 
-def set_seed(seed: int):
+def set_seed(seed: int) -> None:
     """Set all random seeds for reproducibility."""
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -43,27 +49,103 @@ def set_seed(seed: int):
 
 
 # ---------------------------------------------------------------------------
-# Device selection
+# CTC decoding (greedy)
 # ---------------------------------------------------------------------------
 
-def get_device(preference: str = "auto") -> torch.device:
-    """Select compute device."""
-    if preference == "auto":
-        if torch.cuda.is_available():
-            device = torch.device("cuda")
-        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            device = torch.device("mps")
-        else:
-            device = torch.device("cpu")
-    else:
-        device = torch.device(preference)
+def greedy_ctc_decode(
+    log_probs: torch.Tensor,
+    lengths: torch.Tensor,
+    blank_id: int = 0,
+) -> List[List[int]]:
+    """
+    Greedy CTC decoding: argmax → collapse → remove blanks.
 
-    print(f"Using device: {device}")
-    return device
+    Args:
+        log_probs: (batch, T, vocab_size) log-probabilities.
+        lengths:   (batch,) actual sequence lengths.
+        blank_id:  CTC blank token ID.
+
+    Returns:
+        List of decoded token ID sequences.
+    """
+    predictions = log_probs.argmax(dim=-1)  # (B, T)
+    decoded = []
+
+    for b in range(predictions.size(0)):
+        seq_len = lengths[b].item()
+        raw = predictions[b, :seq_len].tolist()
+
+        # Collapse consecutive duplicates
+        collapsed = []
+        prev = None
+        for token in raw:
+            if token != prev:
+                collapsed.append(token)
+            prev = token
+
+        # Remove blanks
+        filtered = [t for t in collapsed if t != blank_id]
+        decoded.append(filtered)
+
+    return decoded
 
 
 # ---------------------------------------------------------------------------
-# Training and validation steps
+# WER computation
+# ---------------------------------------------------------------------------
+
+def edit_distance(ref: List[int], hyp: List[int]) -> int:
+    """Compute Levenshtein edit distance between two sequences."""
+    n, m = len(ref), len(hyp)
+    dp = [[0] * (m + 1) for _ in range(n + 1)]
+
+    for i in range(n + 1):
+        dp[i][0] = i
+    for j in range(m + 1):
+        dp[0][j] = j
+
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            if ref[i - 1] == hyp[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1]
+            else:
+                dp[i][j] = 1 + min(
+                    dp[i - 1][j],      # deletion
+                    dp[i][j - 1],      # insertion
+                    dp[i - 1][j - 1],  # substitution
+                )
+
+    return dp[n][m]
+
+
+def compute_wer(
+    references: List[List[int]],
+    hypotheses: List[List[int]],
+) -> float:
+    """
+    Compute Word Error Rate (WER).
+
+    WER = sum(edit_distances) / sum(reference_lengths)
+
+    Args:
+        references: List of reference token ID sequences.
+        hypotheses: List of hypothesis token ID sequences.
+
+    Returns:
+        WER as a float (0.0 = perfect, 1.0 = 100% error).
+    """
+    total_edits = 0
+    total_ref_len = 0
+
+    for ref, hyp in zip(references, hypotheses):
+        total_edits += edit_distance(ref, hyp)
+        total_ref_len += max(len(ref), 1)  # avoid division by zero
+
+    return total_edits / max(total_ref_len, 1)
+
+
+# ---------------------------------------------------------------------------
+# Training step
 # ---------------------------------------------------------------------------
 
 def train_one_epoch(
@@ -72,36 +154,77 @@ def train_one_epoch(
     criterion: nn.Module,
     optimizer: optim.Optimizer,
     device: torch.device,
-) -> Tuple[float, float]:
-    """Train for one epoch. Returns (avg_loss, accuracy)."""
+    scaler: torch.cuda.amp.GradScaler,
+    config: Config,
+) -> float:
+    """
+    Train for one epoch.
+
+    Returns:
+        Average CTC loss over the epoch.
+    """
     model.train()
     total_loss = 0.0
-    correct = 0
-    total = 0
+    total_samples = 0
 
-    for sequences, labels in loader:
-        sequences = sequences.to(device)
+    for batch in loader:
+        # Skip empty batches (all samples filtered out by collate_fn)
+        if batch is None:
+            continue
+        features, labels, feat_lengths, label_lengths = batch
+        features = features.to(device)
         labels = labels.to(device)
+        feat_lengths = feat_lengths.to(device)
+        label_lengths = label_lengths.to(device)
 
         optimizer.zero_grad()
-        logits = model(sequences)
-        loss = criterion(logits, labels)
-        loss.backward()
 
-        # Gradient clipping — prevents exploding gradients in LSTMs
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        # Mixed precision forward
+        use_amp = config.use_mixed_precision and device.type == "cuda"
+        with torch.cuda.amp.autocast(enabled=use_amp):
+            log_probs, output_lengths = model(features, feat_lengths)
 
-        optimizer.step()
+            # CTC requires (T, B, V) -- transpose
+            log_probs_ctc = log_probs.permute(1, 0, 2)  # (T, B, V)
 
-        total_loss += loss.item() * sequences.size(0)
-        predicted = logits.argmax(dim=1)
-        correct += (predicted == labels).sum().item()
-        total += labels.size(0)
+            # CTC loss
+            loss = criterion(
+                log_probs_ctc,
+                labels,
+                output_lengths,
+                label_lengths,
+            )
 
-    avg_loss = total_loss / total
-    accuracy = correct / total
-    return avg_loss, accuracy
+        # Skip batch if loss is invalid
+        if torch.isnan(loss) or torch.isinf(loss):
+            continue
 
+        # Backward
+        if use_amp:
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters(), config.grad_clip_max_norm
+            )
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters(), config.grad_clip_max_norm
+            )
+            optimizer.step()
+
+        batch_size = features.size(0)
+        total_loss += loss.item() * batch_size
+        total_samples += batch_size
+
+    return total_loss / max(total_samples, 1)
+
+
+# ---------------------------------------------------------------------------
+# Validation step
+# ---------------------------------------------------------------------------
 
 @torch.no_grad()
 def validate(
@@ -109,157 +232,204 @@ def validate(
     loader: DataLoader,
     criterion: nn.Module,
     device: torch.device,
+    config: Config,
 ) -> Tuple[float, float]:
-    """Validate. Returns (avg_loss, accuracy)."""
+    """
+    Validate model.
+
+    Returns:
+        avg_loss: Average CTC loss.
+        wer:      Word Error Rate.
+    """
     model.eval()
     total_loss = 0.0
-    correct = 0
-    total = 0
+    total_samples = 0
+    all_refs = []
+    all_hyps = []
 
-    for sequences, labels in loader:
-        sequences = sequences.to(device)
+    for batch in loader:
+        if batch is None:
+            continue
+        features, labels, feat_lengths, label_lengths = batch
+        features = features.to(device)
         labels = labels.to(device)
+        feat_lengths = feat_lengths.to(device)
+        label_lengths = label_lengths.to(device)
 
-        logits = model(sequences)
-        loss = criterion(logits, labels)
+        log_probs, output_lengths = model(features, feat_lengths)
 
-        total_loss += loss.item() * sequences.size(0)
-        predicted = logits.argmax(dim=1)
-        correct += (predicted == labels).sum().item()
-        total += labels.size(0)
+        # CTC loss
+        log_probs_ctc = log_probs.permute(1, 0, 2)
+        loss = criterion(
+            log_probs_ctc, labels, output_lengths, label_lengths,
+        )
 
-    avg_loss = total_loss / total
-    accuracy = correct / total
-    return avg_loss, accuracy
+        if not (torch.isnan(loss) or torch.isinf(loss)):
+            batch_size = features.size(0)
+            total_loss += loss.item() * batch_size
+            total_samples += batch_size
+
+        # Greedy decode for WER
+        hyps = greedy_ctc_decode(log_probs, output_lengths, blank_id=0)
+        all_hyps.extend(hyps)
+
+        # Extract reference sequences (remove padding)
+        for b in range(labels.size(0)):
+            ref_len = label_lengths[b].item()
+            ref = labels[b, :ref_len].tolist()
+            all_refs.append(ref)
+
+    avg_loss = total_loss / max(total_samples, 1)
+    wer = compute_wer(all_refs, all_hyps)
+
+    return avg_loss, wer
 
 
 # ---------------------------------------------------------------------------
 # Main training loop
 # ---------------------------------------------------------------------------
 
-def train(
-    data_dir: str,
-    train_config: TrainConfig,
-    model_config: ModelConfig,
-) -> Dict:
+def train(config: Config) -> Dict:
     """
     Full training pipeline.
 
     Returns:
-        dict with training history and best metrics.
+        Dict with training history and best metrics.
     """
-    set_seed(train_config.seed)
-    device = get_device(train_config.device)
+    set_seed(config.seed)
+    device = config.device
+    print(f"Using device: {device}")
 
     # --- Data ---
-    train_loader, val_loader, label_map = create_dataloaders(
-        data_dir, train_config
-    )
-
-    # Update model config with actual number of classes
-    model_config.num_classes = len(label_map)
+    print("\nLoading data...")
+    train_loader, val_loader, test_loader, encoder = create_dataloaders(config)
+    vocab_size = encoder.vocab_size
+    print(f"Vocabulary size: {vocab_size}")
 
     # --- Model ---
-    model = build_model(model_config).to(device)
+    model = ISLModel.from_config(config, vocab_size).to(device)
+    model.print_model_summary()
+
+    # Verify constraints
+    assert model.count_parameters() < 500_000, \
+        f"Model too large: {model.count_parameters():,} params (limit: 500K)"
+    assert model.model_size_mb() < 2.0, \
+        f"Model too large: {model.model_size_mb():.3f} MB (limit: 2.0 MB)"
 
     # --- Loss, optimizer, scheduler ---
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(
+    criterion = nn.CTCLoss(blank=config.ctc_blank_id, zero_infinity=True)
+    optimizer = optim.AdamW(
         model.parameters(),
-        lr=train_config.learning_rate,
-        weight_decay=train_config.weight_decay,
+        lr=config.learning_rate,
+        weight_decay=config.weight_decay,
     )
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", patience=5, factor=0.5
+        optimizer, mode="min", patience=5, factor=0.5,
+    )
+    scaler = torch.cuda.amp.GradScaler(
+        enabled=(config.use_mixed_precision and device.type == "cuda"),
     )
 
     # --- Checkpointing ---
-    ckpt_dir = Path(train_config.checkpoint_dir)
+    ckpt_dir = Path(config.checkpoint_dir)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
-    # --- Training ---
+    # --- Training loop ---
+    best_val_wer = float("inf")
     best_val_loss = float("inf")
-    best_val_acc = 0.0
     patience_counter = 0
     history = {
-        "train_loss": [], "train_acc": [],
-        "val_loss": [], "val_acc": [],
+        "train_loss": [], "val_loss": [], "val_wer": [], "lr": [],
     }
 
-    print(f"\n{'='*60}")
-    print(f"Starting training: {train_config.epochs} epochs")
-    print(f"{'='*60}\n")
+    print(f"\n{'='*80}")
+    print(f"Starting training: {config.epochs} epochs, batch_size={config.batch_size}")
+    print(f"{'='*80}\n")
 
-    for epoch in range(1, train_config.epochs + 1):
+    for epoch in range(1, config.epochs + 1):
         start = time.time()
 
-        train_loss, train_acc = train_one_epoch(
-            model, train_loader, criterion, optimizer, device
+        # Train
+        train_loss = train_one_epoch(
+            model, train_loader, criterion, optimizer,
+            device, scaler, config,
         )
-        val_loss, val_acc = validate(model, val_loader, criterion, device)
 
-        scheduler.step(val_loss)
+        # Validate
+        val_loss, val_wer = validate(
+            model, val_loader, criterion, device, config,
+        )
+
+        # Scheduler
+        scheduler.step(val_wer)
+        current_lr = optimizer.param_groups[0]["lr"]
         elapsed = time.time() - start
 
         # Log
         history["train_loss"].append(train_loss)
-        history["train_acc"].append(train_acc)
         history["val_loss"].append(val_loss)
-        history["val_acc"].append(val_acc)
+        history["val_wer"].append(val_wer)
+        history["lr"].append(current_lr)
 
         print(
-            f"Epoch {epoch:3d}/{train_config.epochs} | "
-            f"Train Loss: {train_loss:.4f} Acc: {train_acc:.4f} | "
-            f"Val Loss: {val_loss:.4f} Acc: {val_acc:.4f} | "
-            f"LR: {optimizer.param_groups[0]['lr']:.6f} | "
+            f"Epoch {epoch:3d}/{config.epochs} | "
+            f"Train Loss: {train_loss:.4f} | "
+            f"Val Loss: {val_loss:.4f} | "
+            f"Val WER: {val_wer*100:.2f}% | "
+            f"LR: {current_lr:.2e} | "
             f"{elapsed:.1f}s"
         )
 
-        # Checkpointing
-        if val_loss < best_val_loss:
+        # Checkpointing (by WER)
+        if val_wer < best_val_wer:
+            best_val_wer = val_wer
             best_val_loss = val_loss
-            best_val_acc = val_acc
             patience_counter = 0
 
             checkpoint = {
                 "epoch": epoch,
                 "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
+                "scheduler_state_dict": scheduler.state_dict(),
                 "val_loss": val_loss,
-                "val_acc": val_acc,
-                "model_config": {
-                    "input_size": model_config.input_size,
-                    "hidden_size": model_config.hidden_size,
-                    "num_layers": model_config.num_layers,
-                    "dropout": model_config.dropout,
-                    "bidirectional": model_config.bidirectional,
-                    "num_classes": model_config.num_classes,
+                "val_wer": val_wer,
+                "vocab_size": vocab_size,
+                "config": {
+                    "input_dim": config.feature_dim,
+                    "hidden_size": config.hidden_size,
+                    "num_layers": config.num_gru_layers,
+                    "dropout": config.dropout,
                 },
-                "label_map": label_map,
             }
             torch.save(checkpoint, ckpt_dir / "best_model.pth")
-            print(f"  → Saved best model (val_acc: {val_acc:.4f})")
+            print(f"  -> Saved best model (WER: {val_wer*100:.2f}%)")
         else:
             patience_counter += 1
-            if patience_counter >= train_config.patience:
-                print(f"\nEarly stopping at epoch {epoch} (patience={train_config.patience})")
+            if patience_counter >= config.patience:
+                print(
+                    f"\nEarly stopping at epoch {epoch} "
+                    f"(patience={config.patience})"
+                )
                 break
 
     # Save training history
     with open(ckpt_dir / "history.json", "w") as f:
         json.dump(history, f, indent=2)
 
-    print(f"\n{'='*60}")
+    # Save vocabulary alongside checkpoint
+    encoder.save(str(ckpt_dir / "vocab.json"))
+
+    print(f"\n{'='*80}")
     print(f"Training complete.")
+    print(f"Best validation WER:  {best_val_wer*100:.2f}%")
     print(f"Best validation loss: {best_val_loss:.4f}")
-    print(f"Best validation accuracy: {best_val_acc:.4f}")
-    print(f"{'='*60}")
+    print(f"{'='*80}")
 
     return {
+        "best_val_wer": best_val_wer,
         "best_val_loss": best_val_loss,
-        "best_val_acc": best_val_acc,
         "history": history,
-        "label_map": label_map,
+        "vocab_size": vocab_size,
     }
 
 
@@ -268,30 +438,45 @@ def train(
 # ---------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description="Train ISL sign classifier")
-    parser.add_argument("--data_dir", type=str, default="./processed_landmarks")
-    parser.add_argument("--epochs", type=int, default=50)
-    parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--hidden_size", type=int, default=128)
-    parser.add_argument("--seq_length", type=int, default=30)
-    parser.add_argument("--device", type=str, default="auto")
+    parser = argparse.ArgumentParser(
+        description="Train ISL recognition model (minGRU + CTC)"
+    )
+    parser.add_argument("--epochs", type=int, default=None)
+    parser.add_argument("--batch_size", type=int, default=None)
+    parser.add_argument("--lr", type=float, default=None)
+    parser.add_argument("--hidden_size", type=int, default=None)
+    parser.add_argument("--num_layers", type=int, default=None)
+    parser.add_argument("--dropout", type=float, default=None)
+    parser.add_argument("--device", type=str, default=None)
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--no_amp", action="store_true",
+                        help="Disable mixed precision training")
 
     args = parser.parse_args()
 
-    train_config = TrainConfig(
-        data_dir=args.data_dir,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        learning_rate=args.lr,
-        device=args.device,
-    )
+    config = Config()
 
-    model_config = ModelConfig(
-        hidden_size=args.hidden_size,
-    )
+    # Override config with CLI arguments
+    if args.epochs is not None:
+        config.epochs = args.epochs
+    if args.batch_size is not None:
+        config.batch_size = args.batch_size
+    if args.lr is not None:
+        config.learning_rate = args.lr
+    if args.hidden_size is not None:
+        config.hidden_size = args.hidden_size
+    if args.num_layers is not None:
+        config.num_gru_layers = args.num_layers
+    if args.dropout is not None:
+        config.dropout = args.dropout
+    if args.device is not None:
+        config.device_preference = args.device
+    if args.seed is not None:
+        config.seed = args.seed
+    if args.no_amp:
+        config.use_mixed_precision = False
 
-    train(args.data_dir, train_config, model_config)
+    train(config)
 
 
 if __name__ == "__main__":
