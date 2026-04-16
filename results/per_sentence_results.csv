@@ -1,0 +1,21 @@
+sample_id,reference,raw_english,corrected_english,hindi_translation,bleu4,chrf,wer,exact_match,rules_applied,kenlm_used
+sample_0,I ate food yesterday.,i food eat yesterday,I food ate yesterday.,,0.4518,0.765,0.5,False,R6;R8,False
+sample_1,She is happy.,she happy,She is happy.,,1.0,1.0,0.0,True,RE4;R8,False
+sample_2,He reads book.,he book read,He book reads.,,0.5373,0.5631,0.6667,False,R6;R8,False
+sample_3,I will go tomorrow.,i go tomorrow,I will go tomorrow.,,1.0,1.0,0.0,True,R6;R8,False
+sample_4,What is your name?,you name what,You name what?,,0.3237,0.3419,1.0,False,R8,False
+sample_5,I like food.,me food like,I food like.,,0.5373,0.5188,0.6667,False,R1;R6;R8,False
+sample_6,She went to market yesterday.,she market go yesterday,She market went yesterday.,,0.3519,0.7356,0.6,False,R6;R8,False
+sample_7,I do not understand.,i understand not,I understand not.,,0.385,0.6149,0.75,False,R6;R8,False
+sample_8,He bought a big book.,he book big buy,He book big buys.,,0.3097,0.4216,0.6,False,R6;R8,False
+sample_9,We are cooking food now.,we food cook now,We food cooking now.,,0.3519,0.6103,0.4,False,R6;R8,False
+sample_10,They go to school.,they school go,They school go.,,0.385,0.5091,0.75,False,R6;R8,False
+sample_11,I slept yesterday.,i sleep yesterday,I slept yesterday.,,1.0,1.0,0.0,True,R6;R8,False
+sample_12,She cooks food.,she food cook,She food cooks.,,0.5373,0.5704,0.6667,False,R6;R8,False
+sample_13,He is not a doctor.,he doctor not,He doctor not.,,0.2759,0.4378,0.8,False,R8,False
+sample_14,I want help.,i help want,I help want.,,0.5373,0.5188,0.6667,False,R6;R8,False
+sample_15,Where are you going?,you go where,You go where?,,0.385,0.372,1.0,False,R6;R8,False
+sample_16,She cried yesterday.,she cry yesterday,She cried yesterday.,,1.0,1.0,0.0,True,R6;R8,False
+sample_17,We will play tomorrow.,we play tomorrow,We will play tomorrow.,,1.0,1.0,0.0,True,R6;R8,False
+sample_18,He eats food.,he food eat,He food eats.,,0.5373,0.5153,0.6667,False,R6;R8,False
+sample_19,I think you are good.,i think you good,I think you good.,,0.5507,0.7143,0.2,False,R6;R8,False

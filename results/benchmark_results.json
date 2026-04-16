@@ -1,0 +1,803 @@
+{
+  "timestamp": "2026-04-15T11:43:29.404054",
+  "config": {
+    "enable_pronoun_normalization": true,
+    "enable_capitalization": true,
+    "enable_verb_conjugation": true,
+    "enable_article_insertion": true,
+    "enable_contraction_expansion": true,
+    "enable_repeated_word_removal": true,
+    "enable_filler_removal": true,
+    "enable_wh_fronting": false,
+    "enable_negation_reorder": false,
+    "enable_sov_to_svo": false,
+    "enable_adjective_reorder": false,
+    "disabled_rules": [],
+    "kenlm_model_path": null,
+    "kenlm_weight": 1.0,
+    "enable_hindi_translation": true,
+    "translation_backend": "argostranslate",
+    "enable_tts": true,
+    "tts_engine": "pyttsx3",
+    "tts_english_rate": 150,
+    "tts_hindi_rate": 130,
+    "data_dir": "./data_iSign",
+    "csv_path": "./data_iSign/iSign_v1.1.csv",
+    "pose_dir": "./data_iSign/poses",
+    "results_dir": "./results",
+    "checkpoint_path": "./checkpoints/best_model.pth",
+    "vocab_path": "./checkpoints/vocab.json",
+    "norm_stats_path": "./data_iSign/norm_stats.npz",
+    "device": "cpu",
+    "seed": 42
+  },
+  "pipeline_type": "gloss_free",
+  "label_space": "english",
+  "num_samples": 20,
+  "overall_metrics": {
+    "bleu4_sentence_avg": 0.5728425596495408,
+    "bleu4_corpus": 0.3422530052093948,
+    "chrf_avg": 0.6604477250871106,
+    "wer_avg": 0.4966666666666666,
+    "exact_match_rate": 0.25,
+    "num_samples": 20
+  },
+  "ablation_results": [
+    {
+      "name": "no_correction",
+      "description": "Raw detokenization only — no rules, no KenLM",
+      "disabled_rules": [
+        "R1",
+        "R6",
+        "R8",
+        "RE1",
+        "RE2",
+        "RE3",
+        "RE4"
+      ],
+      "kenlm_enabled": false,
+      "metrics": {
+        "bleu4_sentence_avg": 0.4548399443826086,
+        "bleu4_corpus": 0.13813549114852433,
+        "chrf_avg": 0.551224540313468,
+        "wer_avg": 0.5983333333333333,
+        "exact_match_rate": 0.0,
+        "num_samples": 20
+      },
+      "num_samples": 20
+    },
+    {
+      "name": "rules_only",
+      "description": "English cleanup rules only — no KenLM",
+      "disabled_rules": [],
+      "kenlm_enabled": false,
+      "metrics": {
+        "bleu4_sentence_avg": 0.5728425596495408,
+        "bleu4_corpus": 0.3422530052093948,
+        "chrf_avg": 0.6604477250871106,
+        "wer_avg": 0.4966666666666666,
+        "exact_match_rate": 0.25,
+        "num_samples": 20
+      },
+      "num_samples": 20
+    },
+    {
+      "name": "rules_plus_kenlm",
+      "description": "SKIPPED — KenLM model not available. Run scripts/setup_kenlm.py",
+      "disabled_rules": [],
+      "kenlm_enabled": false,
+      "metrics": {},
+      "num_samples": 0
+    },
+    {
+      "name": "disable_R1",
+      "description": "Disable R1 (Pronoun Normalization)",
+      "disabled_rules": [
+        "R1"
+      ],
+      "kenlm_enabled": false,
+      "metrics": {
+        "bleu4_sentence_avg": 0.5685683614441983,
+        "bleu4_corpus": 0.340335545988335,
+        "chrf_avg": 0.6631743874486732,
+        "wer_avg": 0.5133333333333333,
+        "exact_match_rate": 0.25,
+        "num_samples": 20,
+        "delta_bleu4_from_baseline": -0.004274,
+        "delta_wer_from_baseline": 0.016667
+      },
+      "num_samples": 20
+    },
+    {
+      "name": "disable_R6",
+      "description": "Disable R6 (Verb Conjugation)",
+      "disabled_rules": [
+        "R6"
+      ],
+      "kenlm_enabled": false,
+      "metrics": {
+        "bleu4_sentence_avg": 0.4836126697132598,
+        "bleu4_corpus": 0.16844832181434904,
+        "chrf_avg": 0.5708473142844318,
+        "wer_avg": 0.565,
+        "exact_match_rate": 0.05,
+        "num_samples": 20,
+        "delta_bleu4_from_baseline": -0.08923,
+        "delta_wer_from_baseline": 0.068333
+      },
+      "num_samples": 20
+    },
+    {
+      "name": "disable_R8",
+      "description": "Disable R8 (Capitalization & Punctuation)",
+      "disabled_rules": [
+        "R8"
+      ],
+      "kenlm_enabled": false,
+      "metrics": {
+        "bleu4_sentence_avg": 0.5161780104668343,
+        "bleu4_corpus": 0.19292337094068956,
+        "chrf_avg": 0.6367550330007076,
+        "wer_avg": 0.5916666666666666,
+        "exact_match_rate": 0.0,
+        "num_samples": 20,
+        "delta_bleu4_from_baseline": -0.056665,
+        "delta_wer_from_baseline": 0.095
+      },
+      "num_samples": 20
+    },
+    {
+      "name": "disable_RE1",
+      "description": "Disable RE1 (Repeated Word Removal)",
+      "disabled_rules": [
+        "RE1"
+      ],
+      "kenlm_enabled": false,
+      "metrics": {
+        "bleu4_sentence_avg": 0.5728425596495408,
+        "bleu4_corpus": 0.3422530052093948,
+        "chrf_avg": 0.6604477250871106,
+        "wer_avg": 0.4966666666666666,
+        "exact_match_rate": 0.25,
+        "num_samples": 20,
+        "delta_bleu4_from_baseline": 0.0,
+        "delta_wer_from_baseline": 0.0
+      },
+      "num_samples": 20
+    },
+    {
+      "name": "disable_RE2",
+      "description": "Disable RE2 (Filler/Noise Removal)",
+      "disabled_rules": [
+        "RE2"
+      ],
+      "kenlm_enabled": false,
+      "metrics": {
+        "bleu4_sentence_avg": 0.5728425596495408,
+        "bleu4_corpus": 0.3422530052093948,
+        "chrf_avg": 0.6604477250871106,
+        "wer_avg": 0.4966666666666666,
+        "exact_match_rate": 0.25,
+        "num_samples": 20,
+        "delta_bleu4_from_baseline": 0.0,
+        "delta_wer_from_baseline": 0.0
+      },
+      "num_samples": 20
+    },
+    {
+      "name": "disable_RE4",
+      "description": "Disable RE4 (Grammar Smoothing)",
+      "disabled_rules": [
+        "RE4"
+      ],
+      "kenlm_enabled": false,
+      "metrics": {
+        "bleu4_sentence_avg": 0.5483440325242319,
+        "bleu4_corpus": 0.3190529768259232,
+        "chrf_avg": 0.6390309947275608,
+        "wer_avg": 0.5133333333333333,
+        "exact_match_rate": 0.2,
+        "num_samples": 20,
+        "delta_bleu4_from_baseline": -0.024499,
+        "delta_wer_from_baseline": 0.016667
+      },
+      "num_samples": 20
+    }
+  ],
+  "per_sentence_summary": [
+    {
+      "sample_id": "sample_0",
+      "reference": "I ate food yesterday.",
+      "raw_tokens": [
+        "i",
+        "food",
+        "eat",
+        "yesterday"
+      ],
+      "raw_english": "i food eat yesterday",
+      "corrected_english": "I food ate yesterday.",
+      "hindi_translation": null,
+      "rules_applied": [
+        "R6",
+        "R8"
+      ],
+      "kenlm_used": false,
+      "bleu4": 0.4518010018049224,
+      "chrf": 0.7650104632496273,
+      "wer": 0.5,
+      "exact_match": false,
+      "timing_ms": {
+        "detokenize_ms": 0.0008000001798791345,
+        "rule_correction_ms": 0.1081000000340282,
+        "kenlm_rerank_ms": 0.0,
+        "hindi_translation_ms": 0.0,
+        "total_correction_ms": 0.11159999985466129,
+        "total_pipeline_ms": 0.12119999973947415
+      }
+    },
+    {
+      "sample_id": "sample_1",
+      "reference": "She is happy.",
+      "raw_tokens": [
+        "she",
+        "happy"
+      ],
+      "raw_english": "she happy",
+      "corrected_english": "She is happy.",
+      "hindi_translation": null,
+      "rules_applied": [
+        "RE4",
+        "R8"
+      ],
+      "kenlm_used": false,
+      "bleu4": 1.0,
+      "chrf": 1.0,
+      "wer": 0.0,
+      "exact_match": true,
+      "timing_ms": {
+        "detokenize_ms": 0.0006000000212225132,
+        "rule_correction_ms": 0.11859999995067483,
+        "kenlm_rerank_ms": 0.0,
+        "hindi_translation_ms": 0.0,
+        "total_correction_ms": 0.12100000003556488,
+        "total_pipeline_ms": 0.12489999971876387
+      }
+    },
+    {
+      "sample_id": "sample_2",
+      "reference": "He reads book.",
+      "raw_tokens": [
+        "he",
+        "book",
+        "read"
+      ],
+      "raw_english": "he book read",
+      "corrected_english": "He book reads.",
+      "hindi_translation": null,
+      "rules_applied": [
+        "R6",
+        "R8"
+      ],
+      "kenlm_used": false,
+      "bleu4": 0.537284965911771,
+      "chrf": 0.5630795130795131,
+      "wer": 0.6666666666666666,
+      "exact_match": false,
+      "timing_ms": {
+        "detokenize_ms": 0.0003999998625658918,
+        "rule_correction_ms": 0.08160000015777769,
+        "kenlm_rerank_ms": 0.0,
+        "hindi_translation_ms": 0.0,
+        "total_correction_ms": 0.08329999991474324,
+        "total_pipeline_ms": 0.08619999971415382
+      }
+    },
+    {
+      "sample_id": "sample_3",
+      "reference": "I will go tomorrow.",
+      "raw_tokens": [
+        "i",
+        "go",
+        "tomorrow"
+      ],
+      "raw_english": "i go tomorrow",
+      "corrected_english": "I will go tomorrow.",
+      "hindi_translation": null,
+      "rules_applied": [
+        "R6",
+        "R8"
+      ],
+      "kenlm_used": false,
+      "bleu4": 1.0,
+      "chrf": 1.0,
+      "wer": 0.0,
+      "exact_match": true,
+      "timing_ms": {
+        "detokenize_ms": 0.0004000003173132427,
+        "rule_correction_ms": 0.18599999975776882,
+        "kenlm_rerank_ms": 0.0,
+        "hindi_translation_ms": 0.0,
+        "total_correction_ms": 0.18769999996948172,
+        "total_pipeline_ms": 0.19069999962084694
+      }
+    },
+    {
+      "sample_id": "sample_4",
+      "reference": "What is your name?",
+      "raw_tokens": [
+        "you",
+        "name",
+        "what"
+      ],
+      "raw_english": "you name what",
+      "corrected_english": "You name what?",
+      "hindi_translation": null,
+      "rules_applied": [
+        "R8"
+      ],
+      "kenlm_used": false,
+      "bleu4": 0.32372956394183194,
+      "chrf": 0.3419026028650453,
+      "wer": 1.0,
+      "exact_match": false,
+      "timing_ms": {
+        "detokenize_ms": 0.0003999998625658918,
+        "rule_correction_ms": 0.08030000026337802,
+        "kenlm_rerank_ms": 0.0,
+        "hindi_translation_ms": 0.0,
+        "total_correction_ms": 0.08210000032704556,
+        "total_pipeline_ms": 0.08490000027450151
+      }
+    },
+    {
+      "sample_id": "sample_5",
+      "reference": "I like food.",
+      "raw_tokens": [
+        "me",
+        "food",
+        "like"
+      ],
+      "raw_english": "me food like",
+      "corrected_english": "I food like.",
+      "hindi_translation": null,
+      "rules_applied": [
+        "R1",
+        "R6",
+        "R8"
+      ],
+      "kenlm_used": false,
+      "bleu4": 0.537284965911771,
+      "chrf": 0.5187710437710438,
+      "wer": 0.6666666666666666,
+      "exact_match": false,
+      "timing_ms": {
+        "detokenize_ms": 0.0006999998731771484,
+        "rule_correction_ms": 0.10470000006534974,
+        "kenlm_rerank_ms": 0.0,
+        "hindi_translation_ms": 0.0,
+        "total_correction_ms": 0.10750000001280569,
+        "total_pipeline_ms": 0.11200000017197453
+      }
+    },
+    {
+      "sample_id": "sample_6",
+      "reference": "She went to market yesterday.",
+      "raw_tokens": [
+        "she",
+        "market",
+        "go",
+        "yesterday"
+      ],
+      "raw_english": "she market go yesterday",
+      "corrected_english": "She market went yesterday.",
+      "hindi_translation": null,
+      "rules_applied": [
+        "R6",
+        "R8"
+      ],
+      "kenlm_used": false,
+      "bleu4": 0.3518629739981188,
+      "chrf": 0.7356321351294259,
+      "wer": 0.6,
+      "exact_match": false,
+      "timing_ms": {
+        "detokenize_ms": 0.0008000001798791345,
+        "rule_correction_ms": 0.1430000002073939,
+        "kenlm_rerank_ms": 0.0,
+        "hindi_translation_ms": 0.0,
+        "total_correction_ms": 0.1461000001654611,
+        "total_pipeline_ms": 0.15149999990171636
+      }
+    },
+    {
+      "sample_id": "sample_7",
+      "reference": "I do not understand.",
+      "raw_tokens": [
+        "i",
+        "understand",
+        "not"
+      ],
+      "raw_english": "i understand not",
+      "corrected_english": "I understand not.",
+      "hindi_translation": null,
+      "rules_applied": [
+        "R6",
+        "R8"
+      ],
+      "kenlm_used": false,
+      "bleu4": 0.38498150077635496,
+      "chrf": 0.6149238844106316,
+      "wer": 0.75,
+      "exact_match": false,
+      "timing_ms": {
+        "detokenize_ms": 0.0006999998731771484,
+        "rule_correction_ms": 0.054600000112259295,
+        "kenlm_rerank_ms": 0.0,
+        "hindi_translation_ms": 0.0,
+        "total_correction_ms": 0.05739999960496789,
+        "total_pipeline_ms": 0.06429999984902679
+      }
+    },
+    {
+      "sample_id": "sample_8",
+      "reference": "He bought a big book.",
+      "raw_tokens": [
+        "he",
+        "book",
+        "big",
+        "buy"
+      ],
+      "raw_english": "he book big buy",
+      "corrected_english": "He book big buys.",
+      "hindi_translation": null,
+      "rules_applied": [
+        "R6",
+        "R8"
+      ],
+      "kenlm_used": false,
+      "bleu4": 0.3096787331587729,
+      "chrf": 0.421636873873808,
+      "wer": 0.6,
+      "exact_match": false,
+      "timing_ms": {
+        "detokenize_ms": 0.0005000001692678779,
+        "rule_correction_ms": 0.12169999990874203,
+        "kenlm_rerank_ms": 0.0,
+        "hindi_translation_ms": 0.0,
+        "total_correction_ms": 0.12349999997240957,
+        "total_pipeline_ms": 0.1266999997824314
+      }
+    },
+    {
+      "sample_id": "sample_9",
+      "reference": "We are cooking food now.",
+      "raw_tokens": [
+        "we",
+        "food",
+        "cook",
+        "now"
+      ],
+      "raw_english": "we food cook now",
+      "corrected_english": "We food cooking now.",
+      "hindi_translation": null,
+      "rules_applied": [
+        "R6",
+        "R8"
+      ],
+      "kenlm_used": false,
+      "bleu4": 0.3518629739981188,
+      "chrf": 0.6102596955346249,
+      "wer": 0.4,
+      "exact_match": false,
+      "timing_ms": {
+        "detokenize_ms": 0.0003999998625658918,
+        "rule_correction_ms": 0.08290000005217735,
+        "kenlm_rerank_ms": 0.0,
+        "hindi_translation_ms": 0.0,
+        "total_correction_ms": 0.08429999979853164,
+        "total_pipeline_ms": 0.0870000003487803
+      }
+    },
+    {
+      "sample_id": "sample_10",
+      "reference": "They go to school.",
+      "raw_tokens": [
+        "they",
+        "school",
+        "go"
+      ],
+      "raw_english": "they school go",
+      "corrected_english": "They school go.",
+      "hindi_translation": null,
+      "rules_applied": [
+        "R6",
+        "R8"
+      ],
+      "kenlm_used": false,
+      "bleu4": 0.38498150077635496,
+      "chrf": 0.5091466473363233,
+      "wer": 0.75,
+      "exact_match": false,
+      "timing_ms": {
+        "detokenize_ms": 0.0004000003173132427,
+        "rule_correction_ms": 0.06100000018705032,
+        "kenlm_rerank_ms": 0.0,
+        "hindi_translation_ms": 0.0,
+        "total_correction_ms": 0.0625000002401066,
+        "total_pipeline_ms": 0.06480000001829467
+      }
+    },
+    {
+      "sample_id": "sample_11",
+      "reference": "I slept yesterday.",
+      "raw_tokens": [
+        "i",
+        "sleep",
+        "yesterday"
+      ],
+      "raw_english": "i sleep yesterday",
+      "corrected_english": "I slept yesterday.",
+      "hindi_translation": null,
+      "rules_applied": [
+        "R6",
+        "R8"
+      ],
+      "kenlm_used": false,
+      "bleu4": 1.0,
+      "chrf": 1.0,
+      "wer": 0.0,
+      "exact_match": true,
+      "timing_ms": {
+        "detokenize_ms": 0.0003999998625658918,
+        "rule_correction_ms": 0.054399999953602673,
+        "kenlm_rerank_ms": 0.0,
+        "hindi_translation_ms": 0.0,
+        "total_correction_ms": 0.05579999969995697,
+        "total_pipeline_ms": 0.05809999993289239
+      }
+    },
+    {
+      "sample_id": "sample_12",
+      "reference": "She cooks food.",
+      "raw_tokens": [
+        "she",
+        "food",
+        "cook"
+      ],
+      "raw_english": "she food cook",
+      "corrected_english": "She food cooks.",
+      "hindi_translation": null,
+      "rules_applied": [
+        "R6",
+        "R8"
+      ],
+      "kenlm_used": false,
+      "bleu4": 0.537284965911771,
+      "chrf": 0.5703629703629703,
+      "wer": 0.6666666666666666,
+      "exact_match": false,
+      "timing_ms": {
+        "detokenize_ms": 0.0003000000106112566,
+        "rule_correction_ms": 0.07170000026235357,
+        "kenlm_rerank_ms": 0.0,
+        "hindi_translation_ms": 0.0,
+        "total_correction_ms": 0.07300000015675323,
+        "total_pipeline_ms": 0.07510000023103203
+      }
+    },
+    {
+      "sample_id": "sample_13",
+      "reference": "He is not a doctor.",
+      "raw_tokens": [
+        "he",
+        "doctor",
+        "not"
+      ],
+      "raw_english": "he doctor not",
+      "corrected_english": "He doctor not.",
+      "hindi_translation": null,
+      "rules_applied": [
+        "R8"
+      ],
+      "kenlm_used": false,
+      "bleu4": 0.2758512992979459,
+      "chrf": 0.43780201569797705,
+      "wer": 0.8,
+      "exact_match": false,
+      "timing_ms": {
+        "detokenize_ms": 0.0003999998625658918,
+        "rule_correction_ms": 0.09959999988495838,
+        "kenlm_rerank_ms": 0.0,
+        "hindi_translation_ms": 0.0,
+        "total_correction_ms": 0.10090000023410539,
+        "total_pipeline_ms": 0.1029000000016822
+      }
+    },
+    {
+      "sample_id": "sample_14",
+      "reference": "I want help.",
+      "raw_tokens": [
+        "i",
+        "help",
+        "want"
+      ],
+      "raw_english": "i help want",
+      "corrected_english": "I help want.",
+      "hindi_translation": null,
+      "rules_applied": [
+        "R6",
+        "R8"
+      ],
+      "kenlm_used": false,
+      "bleu4": 0.537284965911771,
+      "chrf": 0.5187710437710438,
+      "wer": 0.6666666666666666,
+      "exact_match": false,
+      "timing_ms": {
+        "detokenize_ms": 0.0003000000106112566,
+        "rule_correction_ms": 0.03969999988839845,
+        "kenlm_rerank_ms": 0.0,
+        "hindi_translation_ms": 0.0,
+        "total_correction_ms": 0.04099999978279811,
+        "total_pipeline_ms": 0.04309999985707691
+      }
+    },
+    {
+      "sample_id": "sample_15",
+      "reference": "Where are you going?",
+      "raw_tokens": [
+        "you",
+        "go",
+        "where"
+      ],
+      "raw_english": "you go where",
+      "corrected_english": "You go where?",
+      "hindi_translation": null,
+      "rules_applied": [
+        "R6",
+        "R8"
+      ],
+      "kenlm_used": false,
+      "bleu4": 0.38498150077635496,
+      "chrf": 0.3720370197619685,
+      "wer": 1.0,
+      "exact_match": false,
+      "timing_ms": {
+        "detokenize_ms": 0.0003000000106112566,
+        "rule_correction_ms": 0.04089999993084348,
+        "kenlm_rerank_ms": 0.0,
+        "hindi_translation_ms": 0.0,
+        "total_correction_ms": 0.04219999982524314,
+        "total_pipeline_ms": 0.04430000035426929
+      }
+    },
+    {
+      "sample_id": "sample_16",
+      "reference": "She cried yesterday.",
+      "raw_tokens": [
+        "she",
+        "cry",
+        "yesterday"
+      ],
+      "raw_english": "she cry yesterday",
+      "corrected_english": "She cried yesterday.",
+      "hindi_translation": null,
+      "rules_applied": [
+        "R6",
+        "R8"
+      ],
+      "kenlm_used": false,
+      "bleu4": 1.0,
+      "chrf": 1.0,
+      "wer": 0.0,
+      "exact_match": true,
+      "timing_ms": {
+        "detokenize_ms": 0.0003999998625658918,
+        "rule_correction_ms": 0.053699999625678174,
+        "kenlm_rerank_ms": 0.0,
+        "hindi_translation_ms": 0.0,
+        "total_correction_ms": 0.054800000270915916,
+        "total_pipeline_ms": 0.056800000038492726
+      }
+    },
+    {
+      "sample_id": "sample_17",
+      "reference": "We will play tomorrow.",
+      "raw_tokens": [
+        "we",
+        "play",
+        "tomorrow"
+      ],
+      "raw_english": "we play tomorrow",
+      "corrected_english": "We will play tomorrow.",
+      "hindi_translation": null,
+      "rules_applied": [
+        "R6",
+        "R8"
+      ],
+      "kenlm_used": false,
+      "bleu4": 1.0,
+      "chrf": 1.0,
+      "wer": 0.0,
+      "exact_match": true,
+      "timing_ms": {
+        "detokenize_ms": 0.0004000003173132427,
+        "rule_correction_ms": 0.059500000133994035,
+        "kenlm_rerank_ms": 0.0,
+        "hindi_translation_ms": 0.0,
+        "total_correction_ms": 0.060599999869737076,
+        "total_pipeline_ms": 0.06260000009206124
+      }
+    },
+    {
+      "sample_id": "sample_18",
+      "reference": "He eats food.",
+      "raw_tokens": [
+        "he",
+        "food",
+        "eat"
+      ],
+      "raw_english": "he food eat",
+      "corrected_english": "He food eats.",
+      "hindi_translation": null,
+      "rules_applied": [
+        "R6",
+        "R8"
+      ],
+      "kenlm_used": false,
+      "bleu4": 0.537284965911771,
+      "chrf": 0.5153198653198653,
+      "wer": 0.6666666666666666,
+      "exact_match": false,
+      "timing_ms": {
+        "detokenize_ms": 0.0003000000106112566,
+        "rule_correction_ms": 0.05870000040886225,
+        "kenlm_rerank_ms": 0.0,
+        "hindi_translation_ms": 0.0,
+        "total_correction_ms": 0.05989999999655993,
+        "total_pipeline_ms": 0.06209999992279336
+      }
+    },
+    {
+      "sample_id": "sample_19",
+      "reference": "I think you are good.",
+      "raw_tokens": [
+        "i",
+        "think",
+        "you",
+        "good"
+      ],
+      "raw_english": "i think you good",
+      "corrected_english": "I think you good.",
+      "hindi_translation": null,
+      "rules_applied": [
+        "R6",
+        "R8"
+      ],
+      "kenlm_used": false,
+      "bleu4": 0.5506953149031837,
+      "chrf": 0.7142987275783435,
+      "wer": 0.2,
+      "exact_match": false,
+      "timing_ms": {
+        "detokenize_ms": 0.0004000003173132427,
+        "rule_correction_ms": 0.04070000022693421,
+        "kenlm_rerank_ms": 0.0,
+        "hindi_translation_ms": 0.0,
+        "total_correction_ms": 0.04179999996267725,
+        "total_pipeline_ms": 0.04399999988891068
+      }
+    }
+  ],
+  "timing_summary": {
+    "mean_correction_ms": 0.08815999997295876,
+    "min_correction_ms": 0.04309999985707691,
+    "max_correction_ms": 0.19069999962084694,
+    "total_benchmark_s": 0.008468100000300183
+  },
+  "notes": [
+    "Correction-only benchmark (no model inference)",
+    "Tests English post-correction pipeline independently",
+    "Metrics computed against English reference sentences"
+  ]
+}
