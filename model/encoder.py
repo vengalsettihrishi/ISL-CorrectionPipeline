@@ -47,6 +47,8 @@ class Encoder(nn.Module):
         hidden_size: int = 128,
         num_layers: int = 3,
         dropout: float = 0.1,
+        enable_velocity_temperature: bool = True,
+        temperature_init: float = 0.5,
     ):
         super().__init__()
         self.input_dim = input_dim
@@ -65,12 +67,15 @@ class Encoder(nn.Module):
             hidden_size=hidden_size,
             num_layers=num_layers,
             dropout=dropout,
+            enable_velocity_temperature=enable_velocity_temperature,
+            temperature_init=temperature_init,
         )
 
     def forward(
         self,
         x: torch.Tensor,
         h_prev: Optional[list] = None,
+        return_aux: bool = False,
     ) -> Tuple[torch.Tensor, list]:
         """
         Encode a sequence of feature vectors.
@@ -83,13 +88,30 @@ class Encoder(nn.Module):
             encoded: (batch, T, hidden_size) or (batch, hidden_size).
             h_list:  List of hidden states per minGRU layer.
         """
+        motion_mag = self._compute_motion_magnitude(x)
+
         # Project input
         projected = self.input_proj(x)  # (B, T, H) or (B, H)
 
         # Pass through minGRU stack
-        encoded, h_list = self.mingru_stack(projected, h_prev)
+        stack_output = self.mingru_stack(
+            projected,
+            h_prev,
+            motion_mag=motion_mag,
+            return_aux=return_aux,
+        )
+        if return_aux:
+            encoded, h_list, aux = stack_output
+            aux["motion_magnitude"] = motion_mag
+            return encoded, h_list, aux
+        encoded, h_list = stack_output
 
         return encoded, h_list
+
+    def _compute_motion_magnitude(self, x: torch.Tensor) -> torch.Tensor:
+        """Compute per-frame motion magnitude from the velocity half of features."""
+        velocity = x[..., self.input_dim // 2:]
+        return velocity.abs().mean(dim=-1)
 
     @classmethod
     def from_config(cls, config: Config) -> "Encoder":
@@ -99,6 +121,8 @@ class Encoder(nn.Module):
             hidden_size=config.hidden_size,
             num_layers=config.num_gru_layers,
             dropout=config.dropout,
+            enable_velocity_temperature=config.enable_velocity_temperature,
+            temperature_init=config.velocity_temperature_init,
         )
 
 

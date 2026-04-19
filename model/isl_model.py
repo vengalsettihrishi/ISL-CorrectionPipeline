@@ -28,6 +28,7 @@ import torch.nn as nn
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config import Config
+from model.ctc_uncertainty import TemporalUncertaintyHead
 from model.encoder import Encoder
 from model.ctc_head import CTCHead
 
@@ -51,17 +52,31 @@ class ISLModel(nn.Module):
         vocab_size: int = 50,
         num_layers: int = 3,
         dropout: float = 0.1,
+        blank_id: int = 0,
+        enable_velocity_temperature: bool = True,
+        velocity_temperature_init: float = 0.5,
+        enable_tup: bool = True,
+        tup_blank_bias: float = 4.0,
+        tup_temperature: float = 0.67,
+        tup_hard_mask: bool = True,
+        tup_threshold: float = 0.5,
     ):
         super().__init__()
         self.input_dim = input_dim
         self.hidden_size = hidden_size
         self.vocab_size = vocab_size
+        self.blank_id = blank_id
+        self.enable_velocity_temperature = enable_velocity_temperature
+        self.enable_tup = enable_tup
+        self.tup_threshold = tup_threshold
 
         self.encoder = Encoder(
             input_dim=input_dim,
             hidden_size=hidden_size,
             num_layers=num_layers,
             dropout=dropout,
+            enable_velocity_temperature=enable_velocity_temperature,
+            temperature_init=velocity_temperature_init,
         )
 
         self.ctc_head = CTCHead(
@@ -69,10 +84,19 @@ class ISLModel(nn.Module):
             vocab_size=vocab_size,
         )
 
+        self.uncertainty_head = TemporalUncertaintyHead(
+            hidden_size=hidden_size,
+            blank_id=blank_id,
+            blank_bias=tup_blank_bias,
+            temperature=tup_temperature,
+            hard_mask=tup_hard_mask,
+        )
+
     def forward(
         self,
         x: torch.Tensor,
         x_lengths: torch.Tensor,
+        return_aux: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Full forward pass for training with CTC loss.
@@ -87,14 +111,40 @@ class ISLModel(nn.Module):
                             downsampling in this architecture).
         """
         # Encode
-        encoded, _ = self.encoder(x)  # (B, T, H)
+        encoded, _, encoder_aux = self.encoder(x, return_aux=True)  # (B, T, H)
 
         # CTC output
-        log_probs = self.ctc_head(encoded)  # (B, T, V)
+        logits = self.ctc_head.compute_logits(encoded)  # (B, T, V)
+        if self.enable_tup:
+            tup_aux = self.uncertainty_head(
+                encoded,
+                logits,
+                lengths=x_lengths,
+                threshold=self.tup_threshold,
+            )
+            logits = tup_aux["masked_logits"]
+        else:
+            device = x.device
+            B, T, _ = encoded.shape
+            tup_aux = {
+                "masked_logits": logits,
+                "pi": torch.ones(B, T, device=device, dtype=encoded.dtype),
+                "z": torch.ones(B, T, device=device, dtype=encoded.dtype),
+                "frame_uncertainty": torch.zeros(B, T, device=device, dtype=encoded.dtype),
+                "activity_loss": torch.zeros((), device=device, dtype=encoded.dtype),
+                "smooth_loss": torch.zeros((), device=device, dtype=encoded.dtype),
+            }
+        log_probs = torch.log_softmax(logits, dim=-1)
 
         # Output lengths = input lengths (no temporal pooling/striding)
         output_lengths = x_lengths.clone()
 
+        if return_aux:
+            return log_probs, output_lengths, {
+                "encoder": encoder_aux,
+                "tup": tup_aux,
+                "logits": logits,
+            }
         return log_probs, output_lengths
 
     def predict(
@@ -153,6 +203,7 @@ class ISLModel(nn.Module):
     def predict_recurrent(
         self,
         x: torch.Tensor,
+        return_aux: bool = False,
     ) -> List[int]:
         """
         Single-sequence recurrent prediction (for real-time inference).
@@ -170,11 +221,34 @@ class ISLModel(nn.Module):
             T = x.size(1)
             h_states = None
             all_log_probs = []
+            all_pi = []
+            all_tau = []
 
             for t in range(T):
                 frame = x[:, t, :]  # (1, input_dim)
-                encoded, h_states = self.encoder(frame, h_states)
-                log_prob = self.ctc_head(encoded.unsqueeze(1))  # (1, 1, V)
+                encoded, h_states, encoder_aux = self.encoder(
+                    frame, h_states, return_aux=True
+                )
+                logits = self.ctc_head.compute_logits(encoded.unsqueeze(1))
+                if self.enable_tup:
+                    tup_aux = self.uncertainty_head(
+                        encoded.unsqueeze(1),
+                        logits,
+                        lengths=torch.ones(1, dtype=torch.int32, device=x.device),
+                        threshold=self.tup_threshold,
+                    )
+                    log_prob = torch.log_softmax(tup_aux["masked_logits"], dim=-1)
+                    all_pi.append(tup_aux["pi"].squeeze(0).squeeze(0))
+                else:
+                    log_prob = torch.log_softmax(logits, dim=-1)
+                    all_pi.append(torch.tensor(1.0, device=x.device))
+                layer_taus = []
+                for layer_aux in encoder_aux["layers"]:
+                    tau = layer_aux.get("tau")
+                    if tau is not None:
+                        layer_taus.append(tau.squeeze(0).mean())
+                if layer_taus:
+                    all_tau.append(torch.stack(layer_taus).mean())
                 all_log_probs.append(log_prob.squeeze(1))
 
             log_probs = torch.stack(all_log_probs, dim=1)  # (1, T, V)
@@ -188,7 +262,13 @@ class ISLModel(nn.Module):
                     collapsed.append(token)
                 prev = token
 
-            return [t for t in collapsed if t != 0]
+            decoded = [t for t in collapsed if t != 0]
+            if return_aux:
+                return decoded, {
+                    "frame_reliability": torch.stack(all_pi).cpu(),
+                    "mean_tau": torch.stack(all_tau).mean().item() if all_tau else 1.0,
+                }
+            return decoded
 
     def count_parameters(self) -> int:
         """Total number of trainable parameters."""
@@ -206,6 +286,8 @@ class ISLModel(nn.Module):
         print(f"  Input dim:     {self.input_dim}")
         print(f"  Hidden size:   {self.hidden_size}")
         print(f"  Vocab size:    {self.vocab_size}")
+        print(f"  Vel temp:      {'PASS' if self.enable_velocity_temperature else 'OFF'}")
+        print(f"  TUP enabled:   {'PASS' if self.enable_tup else 'OFF'}")
         print(f"  Parameters:    {self.count_parameters():,}")
         print(f"  Size (MB):     {self.model_size_mb():.3f}")
         print(f"  Under 500K:    {'PASS' if self.count_parameters() < 500_000 else 'FAIL'}")
@@ -214,8 +296,10 @@ class ISLModel(nn.Module):
         # Per-component breakdown
         enc_params = sum(p.numel() for p in self.encoder.parameters())
         head_params = sum(p.numel() for p in self.ctc_head.parameters())
+        tup_params = sum(p.numel() for p in self.uncertainty_head.parameters())
         print(f"\n  Encoder:       {enc_params:,} params ({enc_params*4/1024**2:.3f} MB)")
         print(f"  CTC Head:      {head_params:,} params ({head_params*4/1024**2:.3f} MB)")
+        print(f"  TUP Head:      {tup_params:,} params ({tup_params*4/1024**2:.3f} MB)")
         print("=" * 60)
 
     def export_onnx(self, path: str, seq_length: int = 300) -> None:
@@ -257,6 +341,14 @@ class ISLModel(nn.Module):
             vocab_size=vocab_size,
             num_layers=config.num_gru_layers,
             dropout=config.dropout,
+            blank_id=config.ctc_blank_id,
+            enable_velocity_temperature=config.enable_velocity_temperature,
+            velocity_temperature_init=config.velocity_temperature_init,
+            enable_tup=config.enable_tup,
+            tup_blank_bias=config.tup_blank_bias,
+            tup_temperature=config.tup_temperature,
+            tup_hard_mask=config.tup_hard_mask,
+            tup_threshold=config.tup_threshold,
         )
 
 

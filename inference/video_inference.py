@@ -37,6 +37,9 @@ from inference.utils import ProfileTimer, InferenceConfig
 from inference.ctc_decoder import GreedyDecoder, PrefixBeamDecoder, DecoderOutput
 from inference.refinement import TokenRefiner, RefinementOutput
 from inference.model_loader import load_model_bundle, ModelBundle
+from inference.word_fallback import WordFallbackRecognizer
+from inference.fingerspell_fallback import FingerspellFallbackRecognizer
+from inference.fallback_controller import FallbackController
 
 logging.basicConfig(
     level=logging.INFO,
@@ -239,11 +242,34 @@ class VideoInference:
         # Refiner
         self.refiner = TokenRefiner(
             confidence_threshold=config.confidence_threshold,
+            uncertainty_threshold=config.uncertainty_threshold,
             min_token_duration=config.min_token_duration,
             transition_max_frames=config.transition_max_frames,
             motion_suppression_enabled=config.motion_suppression_enabled,
             motion_velocity_threshold=config.motion_velocity_threshold,
             vocabulary=set(bundle.id2word.values()) if bundle.id2word else None,
+        )
+        self.word_fallback = WordFallbackRecognizer(
+            word2id=bundle.word2id,
+            model_path=config.word_fallback_model_path,
+        )
+        self.fingerspell_fallback = FingerspellFallbackRecognizer(
+            word2id=bundle.word2id,
+            model_path=config.fingerspell_model_path,
+        )
+        self.fallback_controller = FallbackController(
+            word2id=bundle.word2id,
+            sentence_accept_threshold=config.sentence_accept_threshold,
+            span_uncertainty_threshold=config.span_uncertainty_threshold,
+            span_confidence_threshold=config.confidence_threshold,
+            word_accept_threshold=config.word_accept_threshold,
+            spell_accept_threshold=config.spell_accept_threshold,
+            motion_threshold=config.motion_velocity_threshold,
+            min_fallback_frames=config.min_fallback_frames,
+            enable_word_fallback=config.enable_word_fallback,
+            enable_fingerspell_fallback=config.enable_fingerspell_fallback,
+            word_fallback=self.word_fallback,
+            fingerspell_fallback=self.fingerspell_fallback,
         )
 
     def process_video(
@@ -282,15 +308,30 @@ class VideoInference:
 
         # Model forward
         with self.timer.measure("model"):
-            log_probs = self.bundle.predict(features)
+            log_probs, aux = self.bundle.predict_with_aux(features)
 
         # Decode
         with self.timer.measure("decode"):
-            decoder_output = self.decoder.decode(log_probs)
+            frame_uncertainty = aux["tup"]["frame_uncertainty"].squeeze(0)
+            decoder_output = self.decoder.decode(
+                log_probs,
+                frame_uncertainties=frame_uncertainty,
+            )
+
+        # Fallback routing
+        with self.timer.measure("fallback"):
+            fallback_result = self.fallback_controller.route(
+                decoder_output,
+                features=features,
+                velocity_magnitudes=vel_mags,
+            )
 
         # Refine
         with self.timer.measure("refine"):
-            refined = self.refiner.refine(decoder_output, vel_mags)
+            refined = self.refiner.refine(
+                fallback_result.decoder_output,
+                vel_mags,
+            )
 
         # Build result
         result = {
@@ -300,6 +341,11 @@ class VideoInference:
                 "raw_tokens": decoder_output.tokens,
                 "raw_text": decoder_output.text,
                 "raw_confidence": round(decoder_output.sequence_confidence, 4),
+                "raw_mean_uncertainty": round(fallback_result.mean_uncertainty, 4),
+                "accepted_sentence": fallback_result.accepted_sentence,
+                "fallback_events": [e.to_dict() for e in fallback_result.routing_events],
+                "routed_tokens": fallback_result.decoder_output.tokens,
+                "routed_text": fallback_result.decoder_output.text,
                 "refined_tokens": refined.tokens,
                 "refined_text": refined.display_text,
                 "rules_fired": refined.rules_fired,

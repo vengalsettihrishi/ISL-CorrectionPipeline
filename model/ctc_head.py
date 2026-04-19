@@ -59,9 +59,13 @@ class CTCHead(nn.Module):
         Returns:
             (batch, T, vocab_size) log-probabilities.
         """
-        logits = self.projection(x)              # (B, T, V)
+        logits = self.compute_logits(x)          # (B, T, V)
         log_probs = F.log_softmax(logits, dim=-1)  # (B, T, V)
         return log_probs
+
+    def compute_logits(self, x: torch.Tensor) -> torch.Tensor:
+        """Project encoder output to raw logits before log-softmax."""
+        return self.projection(x)
 
 
 # ---------------------------------------------------------------------------

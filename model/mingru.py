@@ -25,8 +25,7 @@ Usage:
     python -m model.mingru
 """
 
-import math
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -46,16 +45,28 @@ class MinGRUCell(nn.Module):
         hidden_size: Dimension of hidden state.
     """
 
-    def __init__(self, input_size: int, hidden_size: int):
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        enable_velocity_temperature: bool = True,
+        temperature_init: float = 0.5,
+    ):
         super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
+        self.enable_velocity_temperature = enable_velocity_temperature
 
         # Gate: z_t = sigmoid(W_z @ x_t + b_z)
         self.linear_z = nn.Linear(input_size, hidden_size)
 
         # Candidate: h_tilde = W_h @ x_t + b_h
         self.linear_h = nn.Linear(input_size, hidden_size)
+
+        # Motion-aware temperature: tau_t = 1 + alpha * sigmoid(w_m * m_t + b_m)
+        self.motion_weight = nn.Parameter(torch.tensor(1.0))
+        self.motion_bias = nn.Parameter(torch.tensor(0.0))
+        self.alpha = nn.Parameter(torch.tensor(float(temperature_init)))
 
         self._init_weights()
 
@@ -75,6 +86,8 @@ class MinGRUCell(nn.Module):
         self,
         x: torch.Tensor,
         h_prev: Optional[torch.Tensor] = None,
+        motion_mag: Optional[torch.Tensor] = None,
+        return_aux: bool = False,
     ) -> torch.Tensor:
         """
         Dispatch to parallel or recurrent forward based on input shape.
@@ -92,9 +105,9 @@ class MinGRUCell(nn.Module):
             Recurrent: (batch, hidden_size)          -- new hidden state
         """
         if x.dim() == 3:
-            return self.parallel_forward(x, h_prev)
+            return self.parallel_forward(x, h_prev, motion_mag, return_aux=return_aux)
         elif x.dim() == 2:
-            return self.recurrent_forward(x, h_prev)
+            return self.recurrent_forward(x, h_prev, motion_mag, return_aux=return_aux)
         else:
             raise ValueError(f"Expected 2D or 3D input, got {x.dim()}D")
 
@@ -102,6 +115,8 @@ class MinGRUCell(nn.Module):
         self,
         x: torch.Tensor,
         h_prev: Optional[torch.Tensor] = None,
+        motion_mag: Optional[torch.Tensor] = None,
+        return_aux: bool = False,
     ) -> torch.Tensor:
         """
         Efficient batch-parallel forward for training.
@@ -131,8 +146,11 @@ class MinGRUCell(nn.Module):
         """
         B, T, _ = x.shape
 
+        tau = self._compute_tau(motion_mag, x)
+
         # Parallel: compute all gates and candidates at once (batch matmul)
-        z = torch.sigmoid(self.linear_z(x))       # (B, T, H)
+        z_logits = self.linear_z(x) / tau
+        z = torch.sigmoid(z_logits)                # (B, T, H)
         h_tilde = self.linear_h(x)                 # (B, T, H)
 
         # Initialize h_0
@@ -150,12 +168,20 @@ class MinGRUCell(nn.Module):
             h = (1.0 - z_t) * h + z_t * ht_t  # (B, H)
             outputs[:, t, :] = h
 
+        if return_aux:
+            return outputs, {
+                "tau": tau.squeeze(-1),
+                "gate_logits": z_logits,
+                "motion_mag": motion_mag,
+            }
         return outputs
 
     def recurrent_forward(
         self,
         x_t: torch.Tensor,
         h_prev: Optional[torch.Tensor] = None,
+        motion_mag: Optional[torch.Tensor] = None,
+        return_aux: bool = False,
     ) -> torch.Tensor:
         """
         Process a single timestep (for real-time inference).
@@ -173,11 +199,37 @@ class MinGRUCell(nn.Module):
                 device=x_t.device, dtype=x_t.dtype,
             )
 
-        z_t = torch.sigmoid(self.linear_z(x_t))    # (B, H)
+        tau_t = self._compute_tau(motion_mag, x_t)
+        z_logits = self.linear_z(x_t) / tau_t
+        z_t = torch.sigmoid(z_logits)              # (B, H)
         h_tilde = self.linear_h(x_t)                # (B, H)
         h_t = (1.0 - z_t) * h_prev + z_t * h_tilde  # (B, H)
 
+        if return_aux:
+            return h_t, {
+                "tau": tau_t.squeeze(-1),
+                "gate_logits": z_logits,
+                "motion_mag": motion_mag,
+            }
         return h_t
+
+    def _compute_tau(
+        self,
+        motion_mag: Optional[torch.Tensor],
+        x: torch.Tensor,
+    ) -> torch.Tensor:
+        """Compute motion-conditioned gate temperature."""
+        if (not self.enable_velocity_temperature) or motion_mag is None:
+            return torch.ones(*x.shape[:-1], 1, device=x.device, dtype=x.dtype)
+
+        if motion_mag.dim() == x.dim():
+            motion_mag = motion_mag.squeeze(-1)
+
+        alpha = F.softplus(self.alpha)
+        tau = 1.0 + alpha * torch.sigmoid(
+            self.motion_weight * motion_mag + self.motion_bias
+        )
+        return tau.unsqueeze(-1).to(dtype=x.dtype)
 
 
 class MinGRULayer(nn.Module):
@@ -197,9 +249,16 @@ class MinGRULayer(nn.Module):
         input_size: int,
         hidden_size: int,
         dropout: float = 0.1,
+        enable_velocity_temperature: bool = True,
+        temperature_init: float = 0.5,
     ):
         super().__init__()
-        self.cell = MinGRUCell(input_size, hidden_size)
+        self.cell = MinGRUCell(
+            input_size,
+            hidden_size,
+            enable_velocity_temperature=enable_velocity_temperature,
+            temperature_init=temperature_init,
+        )
         self.norm = nn.LayerNorm(hidden_size)
         self.drop = nn.Dropout(dropout)
 
@@ -207,6 +266,8 @@ class MinGRULayer(nn.Module):
         self,
         x: torch.Tensor,
         h_prev: Optional[torch.Tensor] = None,
+        motion_mag: Optional[torch.Tensor] = None,
+        return_aux: bool = False,
     ) -> torch.Tensor:
         """
         Args:
@@ -216,9 +277,15 @@ class MinGRULayer(nn.Module):
         Returns:
             Same shape as MinGRUCell output, with norm and dropout applied.
         """
-        h = self.cell(x, h_prev)
+        cell_output = self.cell(x, h_prev, motion_mag=motion_mag, return_aux=return_aux)
+        if return_aux:
+            h, aux = cell_output
+        else:
+            h = cell_output
         h = self.norm(h)
         h = self.drop(h)
+        if return_aux:
+            return h, aux
         return h
 
 
@@ -239,6 +306,8 @@ class MinGRUStack(nn.Module):
         hidden_size: int,
         num_layers: int = 3,
         dropout: float = 0.1,
+        enable_velocity_temperature: bool = True,
+        temperature_init: float = 0.5,
     ):
         super().__init__()
         self.num_layers = num_layers
@@ -247,12 +316,22 @@ class MinGRUStack(nn.Module):
         self.layers = nn.ModuleList()
         for i in range(num_layers):
             in_dim = input_size if i == 0 else hidden_size
-            self.layers.append(MinGRULayer(in_dim, hidden_size, dropout))
+            self.layers.append(
+                MinGRULayer(
+                    in_dim,
+                    hidden_size,
+                    dropout,
+                    enable_velocity_temperature=enable_velocity_temperature,
+                    temperature_init=temperature_init,
+                )
+            )
 
     def forward(
         self,
         x: torch.Tensor,
         h_prev: Optional[list] = None,
+        motion_mag: Optional[torch.Tensor] = None,
+        return_aux: bool = False,
     ) -> Tuple[torch.Tensor, list]:
         """
         Forward through all layers.
@@ -270,15 +349,28 @@ class MinGRUStack(nn.Module):
             h_prev = [None] * self.num_layers
 
         h_list = []
+        layer_aux = []
         out = x
         for i, layer in enumerate(self.layers):
-            out = layer(out, h_prev[i])
+            layer_output = layer(
+                out,
+                h_prev[i],
+                motion_mag=motion_mag,
+                return_aux=return_aux,
+            )
+            if return_aux:
+                out, aux = layer_output
+                layer_aux.append(aux)
+            else:
+                out = layer_output
             # For recurrent mode, extract last hidden state
             if out.dim() == 3:
                 h_list.append(out[:, -1, :])
             else:
                 h_list.append(out)
 
+        if return_aux:
+            return out, h_list, {"layers": layer_aux}
         return out, h_list
 
 
@@ -296,7 +388,7 @@ if __name__ == "__main__":
     cell = MinGRUCell(D_in, D_h)
     params = sum(p.numel() for p in cell.parameters())
     print(f"  MinGRUCell params: {params:,}")
-    expected_params = 2 * (D_in * D_h + D_h)
+    expected_params = 2 * (D_in * D_h + D_h) + 3  # + motion_weight, motion_bias, alpha
     assert params == expected_params, f"Unexpected param count: {params}"
 
     # Parallel forward (T=300 -- realistic sequence length)

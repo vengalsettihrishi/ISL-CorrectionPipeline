@@ -1,13 +1,14 @@
 """
 inference/model_loader.py -- Reliable checkpoint, vocabulary, and stats loader.
 
-Loads a trained Sprint 2 checkpoint and restores:
-    - ISLModel with correct architecture config
+Loads a trained checkpoint and restores:
+    - ISLModel with the correct lightweight architecture config
     - LabelEncoder with vocabulary (id2word, word2id)
     - Normalization statistics (mean, std)
     - Label-space type (english or gloss)
 
-All loading is CPU-safe.
+All loading is CPU-safe and exposes both standard predictions and
+Sprint 5 uncertainty-aware auxiliary outputs.
 
 Usage:
     python -m inference.model_loader
@@ -102,13 +103,32 @@ class ModelBundle:
         Returns:
             log_probs: (T, vocab_size) tensor of log-probabilities.
         """
+        log_probs, _ = self.predict_with_aux(features)
+        return log_probs
+
+    def predict_with_aux(self, features: np.ndarray) -> Tuple[torch.Tensor, Dict]:
+        """
+        Run model forward on features and return uncertainty-aware auxiliaries.
+
+        Args:
+            features: (T, 450) numpy array (already normalized).
+
+        Returns:
+            log_probs: (T, vocab_size) tensor of log-probabilities.
+            aux: Dict with encoder/tup diagnostics on CPU-friendly tensors.
+        """
         x = torch.from_numpy(features).float().unsqueeze(0).to(self.device)
-        x_lengths = torch.tensor([features.shape[0]], dtype=torch.int32)
+        x_lengths = torch.tensor(
+            [features.shape[0]],
+            dtype=torch.int32,
+            device=self.device,
+        )
 
         with torch.no_grad():
-            log_probs, out_lengths = self.model(x, x_lengths)
+            log_probs, _, aux = self.model(x, x_lengths, return_aux=True)
 
-        return log_probs.squeeze(0)  # (T, V)
+        log_probs = log_probs.squeeze(0)
+        return log_probs, _detach_aux(aux)
 
     def summary(self) -> str:
         """Return a human-readable summary."""
@@ -121,6 +141,8 @@ class ModelBundle:
             f"  Device:        {self.device}",
             f"  Epoch:         {self.epoch}",
             f"  Normalized:    {self.mean is not None}",
+            f"  Vel temp:      {self.config.get('enable_velocity_temperature', False)}",
+            f"  TUP enabled:   {self.config.get('enable_tup', False)}",
         ]
         return "\n".join(lines)
 
@@ -170,12 +192,27 @@ def load_model_bundle(
         vocab_size=vocab_size,
         num_layers=model_cfg.get("num_layers", 3),
         dropout=model_cfg.get("dropout", 0.1),
+        blank_id=model_cfg.get("blank_id", model_cfg.get("ctc_blank_id", 0)),
+        enable_velocity_temperature=model_cfg.get("enable_velocity_temperature", True),
+        velocity_temperature_init=model_cfg.get("velocity_temperature_init", 0.5),
+        enable_tup=model_cfg.get("enable_tup", True),
+        tup_blank_bias=model_cfg.get("tup_blank_bias", 4.0),
+        tup_temperature=model_cfg.get("tup_temperature", 0.67),
+        tup_hard_mask=model_cfg.get("tup_hard_mask", True),
+        tup_threshold=model_cfg.get("tup_threshold", 0.5),
     ).to(device)
 
-    model.load_state_dict(checkpoint["model_state_dict"])
+    missing, unexpected = model.load_state_dict(
+        checkpoint["model_state_dict"],
+        strict=False,
+    )
     model.eval()
     logger.info(f"Model restored: {model.count_parameters():,} params, "
                 f"vocab_size={vocab_size}")
+    if missing:
+        logger.warning(f"Missing checkpoint keys initialized from defaults: {missing}")
+    if unexpected:
+        logger.warning(f"Unexpected checkpoint keys ignored: {unexpected}")
 
     # 4. Load normalization stats
     mean, std = _load_norm_stats(norm_stats_path)
@@ -249,6 +286,29 @@ def _load_norm_stats(
         return None, None
 
 
+def _detach_aux(aux: Dict) -> Dict:
+    """Recursively move tensor-valued aux outputs to CPU for inference use."""
+    result = {}
+    for key, value in aux.items():
+        if isinstance(value, dict):
+            result[key] = _detach_aux(value)
+        elif torch.is_tensor(value):
+            result[key] = value.detach().cpu()
+        elif isinstance(value, list):
+            converted = []
+            for item in value:
+                if isinstance(item, dict):
+                    converted.append(_detach_aux(item))
+                elif torch.is_tensor(item):
+                    converted.append(item.detach().cpu())
+                else:
+                    converted.append(item)
+            result[key] = converted
+        else:
+            result[key] = value
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Standalone verification
 # ---------------------------------------------------------------------------
@@ -274,6 +334,14 @@ if __name__ == "__main__":
             "hidden_size": cfg.hidden_size,
             "num_layers": cfg.num_gru_layers,
             "dropout": cfg.dropout,
+            "blank_id": cfg.ctc_blank_id,
+            "enable_velocity_temperature": cfg.enable_velocity_temperature,
+            "velocity_temperature_init": cfg.velocity_temperature_init,
+            "enable_tup": cfg.enable_tup,
+            "tup_blank_bias": cfg.tup_blank_bias,
+            "tup_temperature": cfg.tup_temperature,
+            "tup_hard_mask": cfg.tup_hard_mask,
+            "tup_threshold": cfg.tup_threshold,
         },
     }
 
@@ -309,9 +377,10 @@ if __name__ == "__main__":
     # Test predict
     features = np.random.randn(50, 450).astype(np.float32)
     normalized = bundle.normalize(features)
-    log_probs = bundle.predict(normalized)
+    log_probs, aux = bundle.predict_with_aux(normalized)
     print(f"\n  Predict output: {log_probs.shape}")
     assert log_probs.shape == (50, vocab_size)
+    assert "tup" in aux
 
     # Cleanup
     os.unlink(ckpt_path)

@@ -39,6 +39,8 @@ class TokenSpan:
     start_frame: int
     end_frame: int
     confidence: float
+    uncertainty: float = 0.0
+    origin: str = "sentence"
 
     @property
     def frame_count(self) -> int:
@@ -52,6 +54,8 @@ class TokenSpan:
             "end_frame": self.end_frame,
             "frame_count": self.frame_count,
             "confidence": round(self.confidence, 4),
+            "uncertainty": round(self.uncertainty, 4),
+            "origin": self.origin,
         }
 
 
@@ -65,6 +69,7 @@ class DecoderOutput:
     spans: List[TokenSpan]
     raw_frame_predictions: List[int]
     raw_frame_confidences: List[float]
+    raw_frame_uncertainties: List[float] = field(default_factory=list)
 
     @property
     def text(self) -> str:
@@ -80,6 +85,9 @@ class DecoderOutput:
             "token_confidences": [round(c, 4) for c in self.token_confidences],
             "spans": [s.to_dict() for s in self.spans],
             "num_frames": len(self.raw_frame_predictions),
+            "mean_frame_uncertainty": round(
+                _mean(self.raw_frame_uncertainties), 4
+            ) if self.raw_frame_uncertainties else 0.0,
         }
 
 
@@ -107,6 +115,7 @@ class GreedyDecoder:
         self,
         log_probs: torch.Tensor,
         length: Optional[int] = None,
+        frame_uncertainties: Optional[torch.Tensor] = None,
     ) -> DecoderOutput:
         """
         Decode a single sequence.
@@ -123,6 +132,10 @@ class GreedyDecoder:
 
         log_probs = log_probs[:length]  # (T, V)
         probs = log_probs.exp()         # (T, V) -- actual probabilities
+        if frame_uncertainties is None:
+            raw_uncertainties = [0.0] * length
+        else:
+            raw_uncertainties = _prepare_frame_values(frame_uncertainties, length)
 
         # Step 1: argmax per frame
         best_ids = log_probs.argmax(dim=-1)  # (T,)
@@ -134,22 +147,25 @@ class GreedyDecoder:
             raw_confidences.append(probs[t, best_ids[t]].item())
 
         # Step 2: identify contiguous runs (spans)
-        runs = []  # (token_id, start_frame, end_frame, [frame_probs])
+        runs = []  # (token_id, start_frame, end_frame, [frame_probs], [frame_uncertainties])
         if length > 0:
             current_id = raw_predictions[0]
             current_start = 0
             current_probs = [raw_confidences[0]]
+            current_uncs = [raw_uncertainties[0]]
 
             for t in range(1, length):
                 if raw_predictions[t] == current_id:
                     current_probs.append(raw_confidences[t])
+                    current_uncs.append(raw_uncertainties[t])
                 else:
-                    runs.append((current_id, current_start, t, current_probs))
+                    runs.append((current_id, current_start, t, current_probs, current_uncs))
                     current_id = raw_predictions[t]
                     current_start = t
                     current_probs = [raw_confidences[t]]
+                    current_uncs = [raw_uncertainties[t]]
 
-            runs.append((current_id, current_start, length, current_probs))
+            runs.append((current_id, current_start, length, current_probs, current_uncs))
 
         # Step 3: collapse repeats and remove blanks -> build spans
         spans = []
@@ -158,7 +174,7 @@ class GreedyDecoder:
         tokens = []
 
         prev_id = None
-        for token_id, start, end, frame_probs in runs:
+        for token_id, start, end, frame_probs, frame_uncs in runs:
             if token_id == self.blank_id:
                 prev_id = token_id
                 continue
@@ -171,6 +187,8 @@ class GreedyDecoder:
                         start_frame=spans[-1].start_frame,
                         end_frame=end,
                         confidence=(spans[-1].confidence + _mean(frame_probs)) / 2.0,
+                        uncertainty=(spans[-1].uncertainty + _mean(frame_uncs)) / 2.0,
+                        origin=spans[-1].origin,
                     )
                     token_confidences[-1] = spans[-1].confidence
                 prev_id = token_id
@@ -186,6 +204,7 @@ class GreedyDecoder:
                 start_frame=start,
                 end_frame=end,
                 confidence=conf,
+                uncertainty=_mean(frame_uncs),
             ))
             token_ids.append(token_id)
             token_confidences.append(conf)
@@ -207,12 +226,14 @@ class GreedyDecoder:
             spans=spans,
             raw_frame_predictions=raw_predictions,
             raw_frame_confidences=raw_confidences,
+            raw_frame_uncertainties=raw_uncertainties,
         )
 
     def decode_batch(
         self,
         log_probs: torch.Tensor,
         lengths: torch.Tensor,
+        frame_uncertainties: Optional[torch.Tensor] = None,
     ) -> List[DecoderOutput]:
         """
         Decode a batch of sequences.
@@ -226,7 +247,14 @@ class GreedyDecoder:
         """
         results = []
         for b in range(log_probs.size(0)):
-            result = self.decode(log_probs[b], lengths[b].item())
+            frame_uncertainty = None
+            if frame_uncertainties is not None:
+                frame_uncertainty = frame_uncertainties[b]
+            result = self.decode(
+                log_probs[b],
+                lengths[b].item(),
+                frame_uncertainties=frame_uncertainty,
+            )
             results.append(result)
         return results
 
@@ -263,6 +291,7 @@ class PrefixBeamDecoder:
         log_probs: torch.Tensor,
         length: Optional[int] = None,
         return_top_k: int = 1,
+        frame_uncertainties: Optional[torch.Tensor] = None,
     ) -> DecoderOutput:
         """
         Decode a single sequence using prefix beam search.
@@ -285,6 +314,10 @@ class PrefixBeamDecoder:
         raw_preds = log_probs.argmax(dim=-1).tolist()
         raw_probs = log_probs.exp()
         raw_confs = [raw_probs[t, raw_preds[t]].item() for t in range(T)]
+        raw_uncertainties = (
+            _prepare_frame_values(frame_uncertainties, T)
+            if frame_uncertainties is not None else [0.0] * T
+        )
 
         # Beam state: {prefix_tuple: (log_prob_blank, log_prob_nonblank)}
         NEG_INF = float("-inf")
@@ -356,6 +389,7 @@ class PrefixBeamDecoder:
                 token_confidences=[], spans=[],
                 raw_frame_predictions=raw_preds,
                 raw_frame_confidences=raw_confs,
+                raw_frame_uncertainties=raw_uncertainties,
             )
 
         best_prefix = list(scored[0][0])
@@ -363,7 +397,11 @@ class PrefixBeamDecoder:
 
         # Build spans using greedy alignment (find where each token dominates)
         spans = _build_spans_from_alignment(
-            best_prefix, log_probs, self.blank_id, self.id2word
+            best_prefix,
+            log_probs,
+            self.blank_id,
+            self.id2word,
+            raw_uncertainties,
         )
 
         tokens = [self.id2word.get(tid, f"<id:{tid}>") for tid in best_prefix]
@@ -378,17 +416,26 @@ class PrefixBeamDecoder:
             spans=spans,
             raw_frame_predictions=raw_preds,
             raw_frame_confidences=raw_confs,
+            raw_frame_uncertainties=raw_uncertainties,
         )
 
     def decode_batch(
         self,
         log_probs: torch.Tensor,
         lengths: torch.Tensor,
+        frame_uncertainties: Optional[torch.Tensor] = None,
     ) -> List[DecoderOutput]:
         """Decode a batch of sequences."""
         results = []
         for b in range(log_probs.size(0)):
-            result = self.decode(log_probs[b], lengths[b].item())
+            frame_uncertainty = None
+            if frame_uncertainties is not None:
+                frame_uncertainty = frame_uncertainties[b]
+            result = self.decode(
+                log_probs[b],
+                lengths[b].item(),
+                frame_uncertainties=frame_uncertainty,
+            )
             results.append(result)
         return results
 
@@ -419,6 +466,7 @@ def _build_spans_from_alignment(
     log_probs: torch.Tensor,
     blank_id: int,
     id2word: Dict[int, str],
+    frame_uncertainties: Optional[List[float]] = None,
 ) -> List[TokenSpan]:
     """
     Build TokenSpans by finding where each decoded token is most active.
@@ -465,6 +513,7 @@ def _build_spans_from_alignment(
         # Compute confidence as mean prob of this token over its span
         span_probs = [probs[t, tid].item() for t in range(start, end)]
         conf = _mean(span_probs)
+        unc = _mean(frame_uncertainties[start:end]) if frame_uncertainties else 0.0
         word = id2word.get(tid, f"<id:{tid}>")
 
         spans.append(TokenSpan(
@@ -473,11 +522,23 @@ def _build_spans_from_alignment(
             start_frame=start,
             end_frame=end,
             confidence=conf,
+            uncertainty=unc,
         ))
 
         frame_idx = end
 
     return spans
+
+
+def _prepare_frame_values(
+    values: torch.Tensor,
+    length: int,
+) -> List[float]:
+    """Convert per-frame tensor values to a Python list with the right length."""
+    if values.dim() > 1:
+        values = values.squeeze()
+    values = values[:length]
+    return values.detach().cpu().tolist()
 
 
 # ---------------------------------------------------------------------------

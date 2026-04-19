@@ -1,0 +1,58 @@
+{
+  "results_dir": "results\\tmp_tup_ablation",
+  "variants": [
+    {
+      "name": "baseline",
+      "enable_velocity_temperature": false,
+      "enable_tup": false,
+      "enable_fallback": false,
+      "uncertainty_aware_refinement": false,
+      "checkpoint_path": null
+    },
+    {
+      "name": "velocity_only",
+      "enable_velocity_temperature": true,
+      "enable_tup": false,
+      "enable_fallback": false,
+      "uncertainty_aware_refinement": false,
+      "checkpoint_path": null
+    },
+    {
+      "name": "tup_only",
+      "enable_velocity_temperature": false,
+      "enable_tup": true,
+      "enable_fallback": false,
+      "uncertainty_aware_refinement": true,
+      "checkpoint_path": null
+    },
+    {
+      "name": "velocity_plus_tup",
+      "enable_velocity_temperature": true,
+      "enable_tup": true,
+      "enable_fallback": false,
+      "uncertainty_aware_refinement": true,
+      "checkpoint_path": null
+    },
+    {
+      "name": "velocity_tup_fallback",
+      "enable_velocity_temperature": true,
+      "enable_tup": true,
+      "enable_fallback": true,
+      "uncertainty_aware_refinement": true,
+      "checkpoint_path": null
+    },
+    {
+      "name": "velocity_tup_no_unc_refine",
+      "enable_velocity_temperature": true,
+      "enable_tup": true,
+      "enable_fallback": true,
+      "uncertainty_aware_refinement": false,
+      "checkpoint_path": null
+    }
+  ],
+  "notes": [
+    "Train a dedicated checkpoint per variant for fair comparison.",
+    "Evaluate sequence WER / BLEU and insertion errors near high-motion spans.",
+    "Use the same data split and seed across all variants."
+  ]
+}

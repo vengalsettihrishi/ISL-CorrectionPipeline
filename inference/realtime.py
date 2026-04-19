@@ -39,6 +39,9 @@ from inference.utils import ProfileTimer, InferenceConfig
 from inference.ctc_decoder import GreedyDecoder, PrefixBeamDecoder, DecoderOutput
 from inference.refinement import TokenRefiner, RefinementOutput
 from inference.model_loader import load_model_bundle, ModelBundle
+from inference.word_fallback import WordFallbackRecognizer
+from inference.fingerspell_fallback import FingerspellFallbackRecognizer
+from inference.fallback_controller import FallbackController
 
 logging.basicConfig(
     level=logging.INFO,
@@ -307,15 +310,39 @@ class RealtimeInference:
         # Refiner
         self.refiner = TokenRefiner(
             confidence_threshold=config.confidence_threshold,
+            uncertainty_threshold=config.uncertainty_threshold,
             min_token_duration=config.min_token_duration,
             transition_max_frames=config.transition_max_frames,
             motion_suppression_enabled=config.motion_suppression_enabled,
             motion_velocity_threshold=config.motion_velocity_threshold,
             vocabulary=set(bundle.id2word.values()) if bundle.id2word else None,
         )
+        self.word_fallback = WordFallbackRecognizer(
+            word2id=bundle.word2id,
+            model_path=config.word_fallback_model_path,
+        )
+        self.fingerspell_fallback = FingerspellFallbackRecognizer(
+            word2id=bundle.word2id,
+            model_path=config.fingerspell_model_path,
+        )
+        self.fallback_controller = FallbackController(
+            word2id=bundle.word2id,
+            sentence_accept_threshold=config.sentence_accept_threshold,
+            span_uncertainty_threshold=config.span_uncertainty_threshold,
+            span_confidence_threshold=config.confidence_threshold,
+            word_accept_threshold=config.word_accept_threshold,
+            spell_accept_threshold=config.spell_accept_threshold,
+            motion_threshold=config.motion_velocity_threshold,
+            min_fallback_frames=config.min_fallback_frames,
+            enable_word_fallback=config.enable_word_fallback,
+            enable_fingerspell_fallback=config.enable_fingerspell_fallback,
+            word_fallback=self.word_fallback,
+            fingerspell_fallback=self.fingerspell_fallback,
+        )
 
         # State
         self.last_result_text = ""
+        self.last_status_text = ""
         self.fps_history = []
         self.frame_count = 0
 
@@ -427,20 +454,40 @@ class RealtimeInference:
 
         # Model forward
         with self.timer.measure("model"):
-            log_probs = self.bundle.predict(features)
+            log_probs, aux = self.bundle.predict_with_aux(features)
 
         # Decode
         with self.timer.measure("decode"):
-            decoder_output = self.decoder.decode(log_probs)
+            decoder_output = self.decoder.decode(
+                log_probs,
+                frame_uncertainties=aux["tup"]["frame_uncertainty"].squeeze(0),
+            )
+
+        # Fallback routing
+        with self.timer.measure("fallback"):
+            fallback_result = self.fallback_controller.route(
+                decoder_output,
+                features=features,
+                velocity_magnitudes=vel_mags,
+            )
 
         # Refine
         with self.timer.measure("refine"):
-            refined = self.refiner.refine(decoder_output, vel_mags)
+            refined = self.refiner.refine(
+                fallback_result.decoder_output,
+                vel_mags,
+            )
 
         self.last_result_text = refined.display_text or "[empty]"
+        self.last_status_text = (
+            f"conf={fallback_result.sentence_confidence:.2f} "
+            f"unc={fallback_result.mean_uncertainty:.2f} "
+            f"events={len(fallback_result.routing_events)}"
+        )
 
         # Print to console
         print(f"  [{self.buffer.count} frames] -> {self.last_result_text}")
+        print(f"    {self.last_status_text}")
         if refined.rules_fired:
             for rule in refined.rules_fired[:3]:
                 print(f"    - {rule}")
@@ -489,10 +536,16 @@ class RealtimeInference:
                 (10, h - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
                 (255, 255, 255), 2,
             )
+        if self.last_status_text:
+            cv2.putText(
+                frame, self.last_status_text[:50],
+                (10, h - 55), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
+                (0, 255, 255), 1,
+            )
 
         # Latency breakdown (right side)
         y_pos = 100
-        for stage in ["mediapipe", "model", "decode", "refine"]:
+        for stage in ["mediapipe", "model", "decode", "fallback", "refine"]:
             ms = self.timer.get_last(stage)
             if ms > 0:
                 cv2.putText(

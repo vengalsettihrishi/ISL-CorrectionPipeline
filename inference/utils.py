@@ -140,6 +140,9 @@ class InferenceConfig:
     motion_velocity_threshold: float = 0.05
     """Velocity magnitude above which a frame is considered high-motion."""
 
+    uncertainty_threshold: float = 0.55
+    """Span/frame uncertainty above which a region is considered unreliable."""
+
     # --- Realtime ---
     pause_velocity_threshold: float = 0.01
     """Velocity magnitude below which frames count as 'paused'."""
@@ -185,6 +188,37 @@ class InferenceConfig:
 
     show_confidences: bool = True
     """Display per-token confidences in output."""
+
+    # --- Sprint 5 routing / fallback ---
+    sentence_accept_threshold: float = 0.6
+    """Accept sentence-level result when sequence confidence exceeds this."""
+
+    span_uncertainty_threshold: float = 0.45
+    """Route spans whose aggregated uncertainty exceeds this."""
+
+    word_accept_threshold: float = 0.6
+    """Accept word-level fallback result above this confidence."""
+
+    spell_accept_threshold: float = 0.55
+    """Invoke / accept fingerspelling fallback above this threshold."""
+
+    min_fallback_frames: int = 3
+    """Minimum span length before running specialized fallback models."""
+
+    enable_fallback: bool = True
+    """Enable sentence -> word -> fingerspelling routing."""
+
+    enable_word_fallback: bool = True
+    """Enable isolated-word fallback model / placeholder."""
+
+    enable_fingerspell_fallback: bool = True
+    """Enable fingerspelling fallback model / placeholder."""
+
+    word_fallback_model_path: Optional[str] = None
+    """Optional checkpoint/path for specialized isolated-word fallback."""
+
+    fingerspell_model_path: Optional[str] = None
+    """Optional checkpoint/path for specialized fingerspelling fallback."""
 
 
 # ---------------------------------------------------------------------------

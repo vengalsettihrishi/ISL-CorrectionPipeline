@@ -187,6 +187,48 @@ class Config:
     use_mixed_precision: bool = True
     """Enable torch.cuda.amp mixed-precision training on GPU."""
 
+    enable_velocity_temperature: bool = True
+    """Enable motion-conditioned gate temperature inside minGRU."""
+
+    velocity_temperature_init: float = 0.5
+    """Initial value for the learnable motion temperature scale."""
+
+    enable_tup: bool = True
+    """Enable Temporal Uncertainty Propagation (TUP) masking."""
+
+    tup_lambda: float = 0.01
+    """Weight for the TUP activity regularizer."""
+
+    tup_smooth_lambda: float = 0.01
+    """Weight for temporal smoothness regularization on frame reliability."""
+
+    tup_temperature: float = 0.67
+    """Relaxation temperature for Binary Concrete / ST masking."""
+
+    tup_hard_mask: bool = True
+    """Use straight-through hard masks for TUP during training/inference."""
+
+    tup_threshold: float = 0.5
+    """Inference threshold for converting frame reliability to hard masks."""
+
+    tup_blank_bias: float = 4.0
+    """Bias added to the blank logit for uncertain frames."""
+
+    sentence_accept_threshold: float = 0.6
+    """Sentence confidence threshold above which fallback is skipped."""
+
+    span_uncertainty_threshold: float = 0.45
+    """Span uncertainty threshold that marks a region as fallback-eligible."""
+
+    word_accept_threshold: float = 0.6
+    """Confidence threshold required to accept word-level fallback output."""
+
+    spell_accept_threshold: float = 0.55
+    """Confidence threshold required to accept fingerspelling fallback output."""
+
+    min_fallback_frames: int = 3
+    """Minimum span length before the fallback controller will route it."""
+
     # ------------------------------------------------------------------
     # CTC
     # ------------------------------------------------------------------

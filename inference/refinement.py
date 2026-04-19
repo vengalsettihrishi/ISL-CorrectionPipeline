@@ -73,6 +73,7 @@ class TokenRefiner:
     def __init__(
         self,
         confidence_threshold: float = 0.3,
+        uncertainty_threshold: float = 0.55,
         min_token_duration: int = 3,
         transition_max_frames: int = 2,
         motion_suppression_enabled: bool = True,
@@ -80,6 +81,7 @@ class TokenRefiner:
         vocabulary: Optional[Set[str]] = None,
     ):
         self.confidence_threshold = confidence_threshold
+        self.uncertainty_threshold = uncertainty_threshold
         self.min_token_duration = min_token_duration
         self.transition_max_frames = transition_max_frames
         self.motion_suppression_enabled = motion_suppression_enabled
@@ -111,27 +113,32 @@ class TokenRefiner:
         removed.extend(r)
         rules_fired.extend(fired)
 
-        # 2. Minimum duration filtering
+        # 2. Explicit uncertainty filtering
+        spans, r, fired = self._filter_uncertainty(spans)
+        removed.extend(r)
+        rules_fired.extend(fired)
+
+        # 3. Minimum duration filtering
         spans, r, fired = self._filter_min_duration(spans)
         removed.extend(r)
         rules_fired.extend(fired)
 
-        # 3. Repetition merging (after duration filter may have removed gaps)
+        # 4. Repetition merging (after duration filter may have removed gaps)
         spans, fired = self._merge_repetitions(spans)
         rules_fired.extend(fired)
 
-        # 4. Transition smoothing
+        # 5. Transition smoothing
         spans, r, fired = self._smooth_transitions(spans)
         removed.extend(r)
         rules_fired.extend(fired)
 
-        # 5. Motion-aware suppression (if velocity data available)
+        # 6. Motion-aware suppression (if velocity data available)
         if self.motion_suppression_enabled and velocity_magnitudes:
             spans, r, fired = self._motion_suppress(spans, velocity_magnitudes)
             removed.extend(r)
             rules_fired.extend(fired)
 
-        # 6. Vocabulary consistency
+        # 7. Vocabulary consistency
         if self.vocabulary:
             spans, r, fired = self._check_vocabulary(spans)
             removed.extend(r)
@@ -204,6 +211,8 @@ class TokenRefiner:
                     start_frame=prev.start_frame,
                     end_frame=s.end_frame,
                     confidence=(prev.confidence + s.confidence) / 2.0,
+                    uncertainty=(prev.uncertainty + s.uncertainty) / 2.0,
+                    origin=prev.origin if prev.origin == s.origin else "merged",
                 )
                 fired.append(
                     f"repetition_merge: merged consecutive '{s.token}' "
@@ -213,6 +222,34 @@ class TokenRefiner:
                 merged.append(s)
 
         return merged, fired
+
+    def _filter_uncertainty(
+        self, spans: List[TokenSpan]
+    ) -> tuple:
+        kept = []
+        removed = []
+        fired = []
+
+        for s in spans:
+            should_remove = (
+                s.uncertainty >= self.uncertainty_threshold
+                and s.confidence < max(self.confidence_threshold, 0.5)
+            )
+            if should_remove:
+                removed.append({
+                    "rule": "uncertainty_filter",
+                    "token": s.token,
+                    "uncertainty": round(s.uncertainty, 4),
+                    "threshold": self.uncertainty_threshold,
+                })
+                fired.append(
+                    f"uncertainty_filter: removed '{s.token}' "
+                    f"(unc={s.uncertainty:.3f} >= {self.uncertainty_threshold})"
+                )
+            else:
+                kept.append(s)
+
+        return kept, removed, fired
 
     # -----------------------------------------------------------------------
     # Operation 3: Minimum duration filtering
@@ -275,6 +312,7 @@ class TokenRefiner:
             # Check if current is a short insertion between identical tokens
             if (prev_span.token_id == next_span.token_id
                     and curr_span.frame_count <= self.transition_max_frames
+                    and curr_span.uncertainty >= self.uncertainty_threshold * 0.75
                     and curr_span.token_id != prev_span.token_id):
                 removed.append({
                     "rule": "transition_smoothing",
@@ -329,17 +367,22 @@ class TokenRefiner:
             span_vels = velocity_magnitudes[start:end]
             mean_vel = sum(span_vels) / max(len(span_vels), 1)
 
-            if (mean_vel > self.motion_velocity_threshold
-                    and s.confidence < self.confidence_threshold * 1.5):
+            if (
+                mean_vel > self.motion_velocity_threshold
+                and s.confidence < self.confidence_threshold * 1.5
+                and s.uncertainty >= self.uncertainty_threshold * 0.75
+            ):
                 removed.append({
                     "rule": "motion_suppression",
                     "token": s.token,
                     "mean_velocity": round(mean_vel, 4),
                     "confidence": round(s.confidence, 4),
+                    "uncertainty": round(s.uncertainty, 4),
                 })
                 fired.append(
                     f"motion_suppression: removed '{s.token}' "
-                    f"(vel={mean_vel:.3f}, conf={s.confidence:.3f})"
+                    f"(vel={mean_vel:.3f}, conf={s.confidence:.3f}, "
+                    f"unc={s.uncertainty:.3f})"
                 )
             else:
                 kept.append(s)

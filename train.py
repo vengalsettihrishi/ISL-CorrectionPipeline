@@ -156,15 +156,19 @@ def train_one_epoch(
     device: torch.device,
     scaler: torch.cuda.amp.GradScaler,
     config: Config,
-) -> float:
+) -> Dict[str, float]:
     """
     Train for one epoch.
 
     Returns:
-        Average CTC loss over the epoch.
+        Average total/CTC/auxiliary losses and reliability statistics.
     """
     model.train()
     total_loss = 0.0
+    total_ctc_loss = 0.0
+    total_mask_loss = 0.0
+    total_smooth_loss = 0.0
+    total_pi = 0.0
     total_samples = 0
 
     for batch in loader:
@@ -182,18 +186,25 @@ def train_one_epoch(
         # Mixed precision forward
         use_amp = config.use_mixed_precision and device.type == "cuda"
         with torch.cuda.amp.autocast(enabled=use_amp):
-            log_probs, output_lengths = model(features, feat_lengths)
+            log_probs, output_lengths, aux = model(
+                features,
+                feat_lengths,
+                return_aux=True,
+            )
 
             # CTC requires (T, B, V) -- transpose
             log_probs_ctc = log_probs.permute(1, 0, 2)  # (T, B, V)
 
             # CTC loss
-            loss = criterion(
+            ctc_loss = criterion(
                 log_probs_ctc,
                 labels,
                 output_lengths,
                 label_lengths,
             )
+            mask_loss = config.tup_lambda * aux["tup"]["activity_loss"]
+            smooth_loss = config.tup_smooth_lambda * aux["tup"]["smooth_loss"]
+            loss = ctc_loss + mask_loss + smooth_loss
 
         # Skip batch if loss is invalid
         if torch.isnan(loss) or torch.isinf(loss):
@@ -217,9 +228,20 @@ def train_one_epoch(
 
         batch_size = features.size(0)
         total_loss += loss.item() * batch_size
+        total_ctc_loss += ctc_loss.item() * batch_size
+        total_mask_loss += mask_loss.item() * batch_size
+        total_smooth_loss += smooth_loss.item() * batch_size
+        total_pi += aux["tup"]["pi"].mean().item() * batch_size
         total_samples += batch_size
 
-    return total_loss / max(total_samples, 1)
+    denom = max(total_samples, 1)
+    return {
+        "loss": total_loss / denom,
+        "ctc_loss": total_ctc_loss / denom,
+        "mask_loss": total_mask_loss / denom,
+        "smooth_loss": total_smooth_loss / denom,
+        "mean_pi": total_pi / denom,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -233,16 +255,20 @@ def validate(
     criterion: nn.Module,
     device: torch.device,
     config: Config,
-) -> Tuple[float, float]:
+) -> Tuple[Dict[str, float], float]:
     """
     Validate model.
 
     Returns:
-        avg_loss: Average CTC loss.
+        avg_metrics: Average total / auxiliary losses.
         wer:      Word Error Rate.
     """
     model.eval()
     total_loss = 0.0
+    total_ctc_loss = 0.0
+    total_mask_loss = 0.0
+    total_smooth_loss = 0.0
+    total_pi = 0.0
     total_samples = 0
     all_refs = []
     all_hyps = []
@@ -256,17 +282,28 @@ def validate(
         feat_lengths = feat_lengths.to(device)
         label_lengths = label_lengths.to(device)
 
-        log_probs, output_lengths = model(features, feat_lengths)
+        log_probs, output_lengths, aux = model(
+            features,
+            feat_lengths,
+            return_aux=True,
+        )
 
         # CTC loss
         log_probs_ctc = log_probs.permute(1, 0, 2)
-        loss = criterion(
+        ctc_loss = criterion(
             log_probs_ctc, labels, output_lengths, label_lengths,
         )
+        mask_loss = config.tup_lambda * aux["tup"]["activity_loss"]
+        smooth_loss = config.tup_smooth_lambda * aux["tup"]["smooth_loss"]
+        loss = ctc_loss + mask_loss + smooth_loss
 
         if not (torch.isnan(loss) or torch.isinf(loss)):
             batch_size = features.size(0)
             total_loss += loss.item() * batch_size
+            total_ctc_loss += ctc_loss.item() * batch_size
+            total_mask_loss += mask_loss.item() * batch_size
+            total_smooth_loss += smooth_loss.item() * batch_size
+            total_pi += aux["tup"]["pi"].mean().item() * batch_size
             total_samples += batch_size
 
         # Greedy decode for WER
@@ -279,7 +316,14 @@ def validate(
             ref = labels[b, :ref_len].tolist()
             all_refs.append(ref)
 
-    avg_loss = total_loss / max(total_samples, 1)
+    denom = max(total_samples, 1)
+    avg_loss = {
+        "loss": total_loss / denom,
+        "ctc_loss": total_ctc_loss / denom,
+        "mask_loss": total_mask_loss / denom,
+        "smooth_loss": total_smooth_loss / denom,
+        "mean_pi": total_pi / denom,
+    }
     wer = compute_wer(all_refs, all_hyps)
 
     return avg_loss, wer
@@ -339,7 +383,11 @@ def train(config: Config) -> Dict:
     best_val_loss = float("inf")
     patience_counter = 0
     history = {
-        "train_loss": [], "val_loss": [], "val_wer": [], "lr": [],
+        "train_loss": [], "train_ctc_loss": [], "train_mask_loss": [],
+        "train_smooth_loss": [], "train_mean_pi": [],
+        "val_loss": [], "val_ctc_loss": [], "val_mask_loss": [],
+        "val_smooth_loss": [], "val_mean_pi": [],
+        "val_wer": [], "lr": [],
     }
 
     print(f"\n{'='*80}")
@@ -350,13 +398,13 @@ def train(config: Config) -> Dict:
         start = time.time()
 
         # Train
-        train_loss = train_one_epoch(
+        train_metrics = train_one_epoch(
             model, train_loader, criterion, optimizer,
             device, scaler, config,
         )
 
         # Validate
-        val_loss, val_wer = validate(
+        val_metrics, val_wer = validate(
             model, val_loader, criterion, device, config,
         )
 
@@ -366,15 +414,29 @@ def train(config: Config) -> Dict:
         elapsed = time.time() - start
 
         # Log
-        history["train_loss"].append(train_loss)
-        history["val_loss"].append(val_loss)
+        history["train_loss"].append(train_metrics["loss"])
+        history["train_ctc_loss"].append(train_metrics["ctc_loss"])
+        history["train_mask_loss"].append(train_metrics["mask_loss"])
+        history["train_smooth_loss"].append(train_metrics["smooth_loss"])
+        history["train_mean_pi"].append(train_metrics["mean_pi"])
+        history["val_loss"].append(val_metrics["loss"])
+        history["val_ctc_loss"].append(val_metrics["ctc_loss"])
+        history["val_mask_loss"].append(val_metrics["mask_loss"])
+        history["val_smooth_loss"].append(val_metrics["smooth_loss"])
+        history["val_mean_pi"].append(val_metrics["mean_pi"])
         history["val_wer"].append(val_wer)
         history["lr"].append(current_lr)
 
         print(
             f"Epoch {epoch:3d}/{config.epochs} | "
-            f"Train Loss: {train_loss:.4f} | "
-            f"Val Loss: {val_loss:.4f} | "
+            f"Train Loss: {train_metrics['loss']:.4f} "
+            f"(ctc={train_metrics['ctc_loss']:.4f}, "
+            f"mask={train_metrics['mask_loss']:.4f}, "
+            f"pi={train_metrics['mean_pi']:.3f}) | "
+            f"Val Loss: {val_metrics['loss']:.4f} "
+            f"(ctc={val_metrics['ctc_loss']:.4f}, "
+            f"mask={val_metrics['mask_loss']:.4f}, "
+            f"pi={val_metrics['mean_pi']:.3f}) | "
             f"Val WER: {val_wer*100:.2f}% | "
             f"LR: {current_lr:.2e} | "
             f"{elapsed:.1f}s"
@@ -383,7 +445,7 @@ def train(config: Config) -> Dict:
         # Checkpointing (by WER)
         if val_wer < best_val_wer:
             best_val_wer = val_wer
-            best_val_loss = val_loss
+            best_val_loss = val_metrics["loss"]
             patience_counter = 0
 
             checkpoint = {
@@ -391,7 +453,7 @@ def train(config: Config) -> Dict:
                 "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "scheduler_state_dict": scheduler.state_dict(),
-                "val_loss": val_loss,
+                "val_loss": val_metrics["loss"],
                 "val_wer": val_wer,
                 "vocab_size": vocab_size,
                 "config": {
@@ -399,6 +461,14 @@ def train(config: Config) -> Dict:
                     "hidden_size": config.hidden_size,
                     "num_layers": config.num_gru_layers,
                     "dropout": config.dropout,
+                    "blank_id": config.ctc_blank_id,
+                    "enable_velocity_temperature": config.enable_velocity_temperature,
+                    "velocity_temperature_init": config.velocity_temperature_init,
+                    "enable_tup": config.enable_tup,
+                    "tup_blank_bias": config.tup_blank_bias,
+                    "tup_temperature": config.tup_temperature,
+                    "tup_hard_mask": config.tup_hard_mask,
+                    "tup_threshold": config.tup_threshold,
                 },
             }
             torch.save(checkpoint, ckpt_dir / "best_model.pth")

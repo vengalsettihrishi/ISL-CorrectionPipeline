@@ -122,6 +122,10 @@ class FullPipeline:
             from inference.model_loader import load_model_bundle
             from inference.ctc_decoder import GreedyDecoder, PrefixBeamDecoder
             from inference.refinement import TokenRefiner
+            from inference.utils import InferenceConfig
+            from inference.word_fallback import WordFallbackRecognizer
+            from inference.fingerspell_fallback import FingerspellFallbackRecognizer
+            from inference.fallback_controller import FallbackController
 
             logger.info("Loading model bundle...")
             self._model_bundle = load_model_bundle(
@@ -145,10 +149,26 @@ class FullPipeline:
                 )
 
             # Refiner
+            inference_cfg = InferenceConfig()
             self._refiner = TokenRefiner(
-                confidence_threshold=0.3,
-                min_token_duration=3,
+                confidence_threshold=inference_cfg.confidence_threshold,
+                uncertainty_threshold=inference_cfg.uncertainty_threshold,
+                min_token_duration=inference_cfg.min_token_duration,
                 vocabulary=set(self._model_bundle.id2word.values()),
+            )
+            self._fallback_controller = FallbackController(
+                word2id=self._model_bundle.word2id,
+                sentence_accept_threshold=inference_cfg.sentence_accept_threshold,
+                span_uncertainty_threshold=inference_cfg.span_uncertainty_threshold,
+                span_confidence_threshold=inference_cfg.confidence_threshold,
+                word_accept_threshold=inference_cfg.word_accept_threshold,
+                spell_accept_threshold=inference_cfg.spell_accept_threshold,
+                motion_threshold=inference_cfg.motion_velocity_threshold,
+                min_fallback_frames=inference_cfg.min_fallback_frames,
+                word_fallback=WordFallbackRecognizer(word2id=self._model_bundle.word2id),
+                fingerspell_fallback=FingerspellFallbackRecognizer(
+                    word2id=self._model_bundle.word2id
+                ),
             )
 
             logger.info("Model bundle ready")
@@ -212,11 +232,19 @@ class FullPipeline:
         )
 
         # Model forward
-        log_probs = self._model_bundle.predict(features)
+        log_probs, aux = self._model_bundle.predict_with_aux(features)
 
         # Decode + refine
-        decoder_output = self._decoder.decode(log_probs)
-        refined = self._refiner.refine(decoder_output, vel_mags)
+        decoder_output = self._decoder.decode(
+            log_probs,
+            frame_uncertainties=aux["tup"]["frame_uncertainty"].squeeze(0),
+        )
+        routed = self._fallback_controller.route(
+            decoder_output,
+            features=features,
+            velocity_magnitudes=vel_mags,
+        )
+        refined = self._refiner.refine(routed.decoder_output, vel_mags)
 
         t_inference = (time.perf_counter() - t_start) * 1000
 
@@ -248,11 +276,14 @@ class FullPipeline:
         result = {
             "file": str(path),
             "frames": landmarks.shape[0],
-            "raw_tokens": refined.tokens,
+            "raw_tokens": decoder_output.tokens,
+            "routed_tokens": routed.decoder_output.tokens,
+            "refined_tokens": refined.tokens,
             "corrected_english": correction_result.corrected_english,
             "hindi_translation": correction_result.hindi_translation,
             "rules_applied": correction_result.rules_applied,
             "kenlm_used": correction_result.kenlm_used,
+            "fallback_events": [event.to_dict() for event in routed.routing_events],
             "timing_ms": {
                 "inference_ms": t_inference,
                 **correction_result.timing_ms,
@@ -489,7 +520,7 @@ class FullPipeline:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="ISL Full Pipeline Runner (Sprint 4)",
+        description="ISL Full Pipeline Runner (Sprint 5)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
