@@ -156,7 +156,7 @@ class Config:
     # Training
     # ------------------------------------------------------------------
     batch_size: int = 32
-    learning_rate: float = 1e-3
+    learning_rate: float = 3e-4
     weight_decay: float = 1e-4
     epochs: int = 100
     patience: int = 15
@@ -187,13 +187,13 @@ class Config:
     use_mixed_precision: bool = True
     """Enable torch.cuda.amp mixed-precision training on GPU."""
 
-    enable_velocity_temperature: bool = True
+    enable_velocity_temperature: bool = False
     """Enable motion-conditioned gate temperature inside minGRU."""
 
     velocity_temperature_init: float = 0.5
     """Initial value for the learnable motion temperature scale."""
 
-    enable_tup: bool = True
+    enable_tup: bool = False
     """Enable Temporal Uncertainty Propagation (TUP) masking."""
 
     tup_lambda: float = 0.01
@@ -201,6 +201,9 @@ class Config:
 
     tup_smooth_lambda: float = 0.01
     """Weight for temporal smoothness regularization on frame reliability."""
+
+    tup_target_activity: float = 0.6
+    """Target mean frame reliability for TUP regularization."""
 
     tup_temperature: float = 0.67
     """Relaxation temperature for Binary Concrete / ST masking."""
