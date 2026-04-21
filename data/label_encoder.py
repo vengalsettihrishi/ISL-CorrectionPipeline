@@ -265,7 +265,6 @@ class LabelEncoder:
 # Column name candidates in priority order (gloss preferred over english)
 _GLOSS_COLUMNS = ["gloss", "glosses", "isl_gloss", "isl", "sign", "signs"]
 _ENGLISH_COLUMNS = ["english", "text", "translation", "sentence"]
-_VIDEO_ID_COLUMNS = ["video_id", "id", "vid", "name", "filename"]
 
 
 def parse_isign_csv(
@@ -274,15 +273,20 @@ def parse_isign_csv(
     """
     Parse the iSign CSV file to extract video IDs and labels.
 
+    Supports two CSV layouts:
+      1. Legacy / local format:
+            video_id, english
+            e.g. "00094a2700f5-1", "Come to me"
+
+      2. iSign v1.1 Kaggle format:
+            split, uid, text, num_frames, feature_path, pose_member
+            video_id is reconstructed as "{uid}-{pose_member}"
+
     Column detection priority:
         1. Look for a GLOSS column first (gloss, glosses, isl_gloss, ...).
            If found, labels are ISL glosses -> label_type = "gloss".
         2. Fall back to an ENGLISH column (english, text, translation, ...).
            Labels are English words -> label_type = "english".
-
-    When label_type is "english", the system is doing English-word CTC,
-    NOT ISL gloss recognition. The downstream grammar correction stage
-    would be redundant in this mode.
 
     Args:
         csv_path: Path to the iSign CSV file.
@@ -308,10 +312,32 @@ def parse_isign_csv(
         reader = csv.DictReader(f)
         fieldnames = reader.fieldnames or []
 
-        # Detect columns
-        vid_col = _find_column(fieldnames, _VIDEO_ID_COLUMNS)
+        # --- Detect video_id column(s) ---
+        # Layout A (legacy): single video_id column
+        vid_col = _find_column(fieldnames, ["video_id"])
 
-        # Prefer gloss over english
+        # Layout B (Kaggle iSign v1.1): uid + pose_member -> "{uid}-{pose_member}"
+        uid_col = _find_column(fieldnames, ["uid"])
+        pose_member_col = _find_column(fieldnames, ["pose_member"])
+        use_uid_pose = (vid_col is None and uid_col is not None and pose_member_col is not None)
+
+        if vid_col is None and not use_uid_pose:
+            # Try any other common id column as fallback
+            vid_col = _find_column(fieldnames, ["id", "vid", "name", "filename"])
+
+        if vid_col is None and not use_uid_pose:
+            raise ValueError(
+                f"CSV must have a video_id column (or uid+pose_member). "
+                f"Found: {fieldnames}"
+            )
+
+        if use_uid_pose:
+            logger.info(
+                f"Detected iSign v1.1 Kaggle CSV format: "
+                f"reconstructing video_id as '{{uid}}-{{pose_member}}'"
+            )
+
+        # --- Detect label column ---
         gloss_col = _find_column(fieldnames, _GLOSS_COLUMNS)
         english_col = _find_column(fieldnames, _ENGLISH_COLUMNS)
 
@@ -336,14 +362,15 @@ def parse_isign_csv(
                 f"Found: {fieldnames}"
             )
 
-        if vid_col is None:
-            raise ValueError(
-                f"CSV must have a video_id column. "
-                f"Found: {fieldnames}"
-            )
-
         for row in reader:
-            video_id = row[vid_col].strip()
+            # Build video_id
+            if use_uid_pose:
+                uid = row[uid_col].strip()
+                pm = row[pose_member_col].strip()
+                video_id = f"{uid}-{pm}"
+            else:
+                video_id = row[vid_col].strip()
+
             text = row[label_col].strip()
             if video_id and text:
                 records.append({"video_id": video_id, "text": text})
