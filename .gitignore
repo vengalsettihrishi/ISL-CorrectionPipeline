@@ -6,3 +6,11 @@ __pycache__/
 Videos/
 dummy_videos/
 processed_dummy/
+ISL_CSLRT_Corpus/
+data_iSign/
+landmark_files_all/
+processed_full_dataset/
+processed_landmarks_sentences/
+.codex_stage_train.patch
+inspection_results.txt
+models/
