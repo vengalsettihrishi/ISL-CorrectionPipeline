@@ -1,0 +1,200 @@
+<mxfile host="app.diagrams.net" modified="2026-04-23T00:45:00.000Z" agent="Codex" version="24.7.17">
+  <diagram id="simplified-dfd" name="Page-1">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="DFD Level 2 - Internal Sub-Processes" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontStyle=1;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="520" y="10" width="360" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lane1" value="P1 - Test Job" style="swimlane;html=1;rounded=0;horizontal=1;startSize=26;fillColor=#f5f5f5;strokeColor=#b3b3b3;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="50" width="1500" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="lane2" value="P2 - Train Job" style="swimlane;html=1;rounded=0;horizontal=1;startSize=26;fillColor=#f5f5f5;strokeColor=#b3b3b3;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="250" width="1500" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="lane3" value="P3 - Evaluate Job" style="swimlane;html=1;rounded=0;horizontal=1;startSize=26;fillColor=#f5f5f5;strokeColor=#b3b3b3;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="450" width="1500" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="lane4" value="P4 - Deploy Job" style="swimlane;html=1;rounded=0;horizontal=1;startSize=26;fillColor=#f5f5f5;strokeColor=#b3b3b3;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="670" width="1500" height="180" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ds3" value="DS3: requirements.txt" style="shape=partialRectangle;html=1;whiteSpace=wrap;rounded=0;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="55" y="120" width="130" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="p11" value="P1.1&#xa;Setup Env" style="ellipse;html=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="230" y="95" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="p12" value="P1.2&#xa;Quick Train" style="ellipse;html=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="410" y="78" width="130" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="dst" value="DS-T: temp model.pkl" style="shape=partialRectangle;html=1;whiteSpace=wrap;rounded=0;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="385" y="160" width="150" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="p13" value="P1.3&#xa;Run Style Suite" style="ellipse;html=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="650" y="80" width="140" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="passp2" value="Pass -&gt; P2" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="930" y="95" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="p1note" value="Artifacts: model.pkl, metrics, logs" style="rounded=0;html=1;whiteSpace=wrap;fillColor=#e1efff;strokeColor=none;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="710" y="165" width="520" height="24" as="geometry" />
+        </mxCell>
+
+        <mxCell id="dsw" value="DS-W: Wine Dataset&#xa;(178 rows, 13 features)" style="shape=partialRectangle;html=1;whiteSpace=wrap;rounded=0;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="70" y="345" width="175" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="p21" value="P2.1&#xa;Load &amp; Split Data" style="ellipse;html=1;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="70" y="290" width="140" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="p22" value="P2.2&#xa;Scale Features" style="ellipse;html=1;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="290" y="290" width="140" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="p23" value="P2.3&#xa;Train Model" style="ellipse;html=1;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="560" y="290" width="140" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="p24" value="P2.4&#xa;Save Model" style="ellipse;html=1;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="850" y="290" width="140" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="ds2a" value="DS2: model folder" style="shape=partialRectangle;html=1;whiteSpace=wrap;rounded=0;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="830" y="360" width="170" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="p25" value="P2.5&#xa;Upload Artifact" style="ellipse;html=1;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="290" width="140" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="ds1a" value="DS1: GitHub Artifacts" style="shape=partialRectangle;html=1;whiteSpace=wrap;rounded=0;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="1170" y="360" width="150" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="p2note" value="Grid search + cross-validation" style="rounded=0;html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=none;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="565" y="375" width="200" height="22" as="geometry" />
+        </mxCell>
+
+        <mxCell id="p31" value="P3.1&#xa;Download Artifact" style="ellipse;html=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="55" y="510" width="130" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ds1b" value="DS1: GitHub Artifacts" style="shape=partialRectangle;html=1;whiteSpace=wrap;rounded=0;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="55" y="600" width="160" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="p32" value="P3.2&#xa;Recreate Test Split" style="ellipse;html=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="295" y="510" width="150" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="p33" value="P3.3&#xa;Compute Metrics" style="ellipse;html=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="560" y="510" width="150" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="p34" value="P3.4&#xa;Accuracy &gt;= 0.82?" style="rhombus;html=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="860" y="500" width="120" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="p35a" value="P3.5a&#xa;Write metrics.json" style="ellipse;html=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="510" width="180" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="p35b" value="P3.5b&#xa;Roll Back Model" style="ellipse;html=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1115" y="600" width="190" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ds2b" value="DS2: model folder" style="shape=partialRectangle;html=1;whiteSpace=wrap;rounded=0;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="1130" y="680" width="160" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="p41" value="P4.1&#xa;Load Model" style="ellipse;html=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="55" y="735" width="130" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ds2c" value="DS2: model folder" style="shape=partialRectangle;html=1;whiteSpace=wrap;rounded=0;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="55" y="820" width="160" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="p42" value="P4.2&#xa;Start Flask API" style="ellipse;html=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="305" y="735" width="150" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="p43" value="P4.3&#xa;Smoke Test" style="ellipse;html=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="575" y="735" width="150" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="p44" value="P4.4&#xa;Serve Predictions" style="ellipse;html=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="875" y="735" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="enduser" value="End User" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="1220" y="748" width="110" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="p4note" value="API: /health, /model-info, /metrics, /predict" style="rounded=0;html=1;whiteSpace=wrap;fillColor=#e2f0d9;strokeColor=none;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="400" y="830" width="750" height="24" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" value="install" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="ds3" target="p11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="env ready" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="p11" target="p12">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="write pkl" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="p12" target="dst">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="use pkl" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="dst" target="p13">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" value="if pass" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="p13" target="passp2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e6" value="raw data" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="dsw" target="p21">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" value="train split" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="p21" target="p22">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" value="scaled train" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="p22" target="p23">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" value="best model" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="p23" target="p24">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" value="model.pkl" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="p24" target="ds2a">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" value="upload" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="p24" target="p25">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12" value="artifact" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="p25" target="ds1a">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e13" value="model.pkl" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="ds1b" target="p31">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e14" value="test seed" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="p31" target="p32">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e15" value="X_test, y_test" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="p32" target="p33">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e16" value="metrics" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="p33" target="p34">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e17" value="YES" style="strokeColor=#82b366;fontColor=#2f6b2f;endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="p34" target="p35a">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e18" value="NO" style="strokeColor=#b85450;fontColor=#b85450;endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="p34" target="p35b">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e19" value="restore" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="p35b" target="ds2b">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e20" value="load" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="ds2c" target="p41">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e21" value="in memory" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="p41" target="p42">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e22" value="API up" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="p42" target="p43">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e23" value="all OK" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="p43" target="p44">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e24" value="POST /predict" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1" source="p44" target="enduser">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
